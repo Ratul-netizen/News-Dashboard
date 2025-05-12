@@ -1,0 +1,74 @@
+{
+    "dashboardTitle": "Bangladesh News Analysis (April 28 - May 5, 2025) in Indian Newspapers",
+    "overallLayout": "A clean, organized layout is crucial. Consider a grid-based design using: Top Row: A high-level overview section. Middle Row: Detailed data visualizations and specific event information. Bottom Row: Additional context, trends, and source information.",
+    "dashboardComponents": [
+      {
+        "type": "timeline",
+        "title": "Key Events Timeline",
+        "content": [
+          {
+            "date": "April 28, 2025",
+            "events": [
+              "Border security measures implemented",
+              "Diplomatic discussions between India and Bangladesh"
+            ]
+          },
+          {
+            "date": "May 2, 2025",
+            "events": [
+              "Meeting between PM Modi and Dr. Yunus",
+              "Reports of border incidents"
+            ]
+          },
+          {
+            "date": "May 5, 2025",
+            "events": [
+              "Statement from ex-Bangladesh general",
+              "Updates on immigration policies"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "table",
+        "title": "Coverage by Newspaper",
+        "content": {
+          "headers": [
+            "Newspaper",
+            "Mentions"
+          ],
+          "rows": [
+            ["The Hindu", 15],
+            ["The Times of India", 12],
+            ["The Indian Express", 10],
+            ["Anandabazar Patrika", 8],
+            ["Bartaman", 7]
+          ]
+        }
+      },
+      {
+        "type": "text",
+        "title": "Language Press Comparison",
+        "content": "Based on the available information for this specific period, key differences in thematic focus between English and Bengali press cannot be determined."
+      },
+      {
+        "type": "list",
+        "title": "Key Sources Used",
+        "content": [
+          "Government officials (implied in reports of border actions and diplomatic meetings)",
+          "Political figures (Modi, Yunus)",
+          "Media reports (general news coverage)"
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Tone/Sentiment Analysis",
+        "content": "Caution/Concern (due to reports of individuals being pushed back, home demolitions, and the arrest, alongside the broader context of potential regional tensions)."
+      },
+      {
+        "type": "text",
+        "title": "Deeper Implications/Trends",
+        "content": "The news items suggest a focus on border security and the treatment of Bangladeshi immigrants in India. The mention of a Modi-Yunus meeting indicates ongoing diplomatic engagement despite potential regional tensions. The statement from an ex-Bangladesh general could point towards internal political dynamics being observed by Indian media. The coverage reflects a securitization of narratives around immigration and continued interest in the political and social developments in Bangladesh."
+      }
+    ]
+}
