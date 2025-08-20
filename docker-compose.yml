@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  news-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: news-dashboard-app
+    ports:
+      - "0.0.0.0:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      - ./scripts:/app/scripts:ro
+    networks:
+      - news-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a database service if you want to use external database
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: news-dashboard-db
+  #   environment:
+  #     POSTGRES_DB: news_dashboard
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: password
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - news-network
+  #   restart: unless-stopped
+  #   ports:
+  #     - "0.0.0.0:5432:5432
+
+networks:
+  news-network:
+    driver: bridge
+
+# volumes:
+#   postgres_data:

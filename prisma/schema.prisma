@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Post {
+  id                    String   @id @default(cuid())
+  postId                String   @unique
+  postText              String
+  postDate              DateTime
+  postLink              String?
+  platform              String
+  source                String
+  category              String?
+  reactions             Int      @default(0)
+  shares                Int      @default(0)
+  comments              Int      @default(0)
+  sentiment             String?
+  featuredImagesPath    String?
+  baseKey               String   // For grouping similar posts
+  groupKey              String   // For identifying news items
+  trendingScore         Float    @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // Relationship to NewsItem
+  newsItem              NewsItem? @relation(fields: [newsItemId], references: [id])
+  newsItemId            String?
+  
+  @@map("posts")
+}
+
+model NewsItem {
+  id                    String   @id @default(cuid())
+  groupKey              String   @unique
+  category              String?
+  primarySource         String   // Source with most engagement
+  primaryPlatform       String   // Platform with most engagement
+  totalReactions        Int      @default(0)
+  totalShares           Int      @default(0)
+  totalComments         Int      @default(0)
+  sourceCount           Int      @default(0)
+  platformCount         Int      @default(0)
+  postCount             Int      @default(0)
+  avgTrendingScore      Float    @default(0)
+  firstPostDate         DateTime
+  lastPostDate          DateTime
+  postAnalysisJson      String?  // JSON string containing detailed analysis
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // Relationship to Posts
+  posts                 Post[]
+  
+  @@map("news_items")
+}
+
+model DailyAgg {
+  id                    String   @id @default(cuid())
+  date                  DateTime @unique
+  category              String?
+  totalPosts            Int      @default(0)
+  totalReactions        Int      @default(0)
+  totalShares           Int      @default(0)
+  totalComments         Int      @default(0)
+  avgTrendingScore      Float    @default(0)
+  topSources            String?  // JSON string of top sources
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@map("daily_aggregations")
+}
+
+model DataIngestionLog {
+  id                    String   @id @default(cuid())
+  timestamp             DateTime @default(now())
+  postsProcessed        Int      @default(0)
+  newsItemsCreated      Int      @default(0)
+  newsItemsUpdated      Int      @default(0)
+  status                String   // SUCCESS, ERROR, PARTIAL
+  errorMessage          String?
+  
+  @@map("data_ingestion_logs")
+}
