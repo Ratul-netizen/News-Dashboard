@@ -60,7 +60,7 @@ const ChartTooltipContent = React.forwardRef<
       color,
       nameKey,
       labelKey,
-    },
+    }: any,
     ref,
   ) => {
     const tooltipLabel = React.useMemo(() => {
@@ -87,6 +87,16 @@ const ChartTooltipContent = React.forwardRef<
       return null
     }
 
+    // At this point, payload is guaranteed to exist and have length > 0
+    const payloadArray = payload as Array<{
+      value: any
+      dataKey: string
+      name: string
+      payload: any
+      fill?: string
+      color?: string
+    }>
+
     return (
       <div
         ref={ref}
@@ -97,7 +107,7 @@ const ChartTooltipContent = React.forwardRef<
       >
         {tooltipLabel ? <div className={cn("font-medium", labelClassName)}>{tooltipLabel}</div> : null}
         <div className="grid gap-1.5">
-          {payload.map((item, index) => {
+          {payloadArray.map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`
             const itemConfig = item.payload
             const indicatorColor = color || item.payload?.fill || item.color
@@ -161,19 +171,28 @@ const ChartLegend = RechartsPrimitive.Legend
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
-      hideIcon?: boolean
-      nameKey?: string
-    }
+  React.ComponentProps<"div"> & {
+    payload?: any
+    verticalAlign?: string
+    hideIcon?: boolean
+    nameKey?: string
+  }
 >(({ className, hideIcon = false, payload, verticalAlign = "bottom", nameKey, ...props }, ref) => {
   if (!payload?.length) {
     return null
   }
 
+  // At this point, payload is guaranteed to exist and have length > 0
+  const payloadArray = payload as Array<{
+    value: any
+    dataKey: string
+    name: string
+    color: string
+  }>
+
   return (
     <div ref={ref} className={cn("flex items-center justify-center gap-4", className)} {...props}>
-      {payload.map((item) => {
+      {payloadArray.map((item) => {
         const key = `${nameKey || item.value || item.dataKey || "value"}`
 
         return (

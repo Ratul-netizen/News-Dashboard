@@ -38,6 +38,9 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Install curl for API calls
+RUN apk add --no-cache curl
+
 # Copy the public folder
 COPY --from=builder /app/public ./public
 
@@ -57,6 +60,16 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 # Copy scripts and make them executable automatically
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 RUN chmod +x scripts/*.sh
+
+# Create data directory for SQLite database with proper permissions
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
+# Initialize database - create empty database and run migrations
+RUN npx prisma db push --accept-data-loss
+
+
+
+
 
 USER nextjs
 

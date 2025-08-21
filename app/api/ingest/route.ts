@@ -2,7 +2,33 @@ import { type NextRequest, NextResponse } from "next/server"
 import axios from "axios"
 import { prisma } from "../../../lib/db"
 
-const API_URL = "http://192.168.100.35:9051/api/posts/"
+// Clear all data endpoint
+export async function DELETE(request: NextRequest) {
+  try {
+    console.log("[v0] Clearing all data...")
+    
+    // Clear all data
+    await prisma.post.deleteMany()
+    await prisma.newsItem.deleteMany()
+    await prisma.dailyAgg.deleteMany()
+    await prisma.dataIngestionLog.deleteMany()
+    
+    console.log("[v0] All data cleared successfully")
+    
+    return NextResponse.json({
+      success: true,
+      message: "All data cleared successfully"
+    })
+  } catch (error) {
+    console.error("[v0] Error clearing data:", error)
+    return NextResponse.json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : "Unknown error" 
+    }, { status: 500 })
+  }
+}
+
+const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.35:9051/api/posts/"
 
 // Transform external API post format to internal format
 function transformExternalPost(externalPost: any) {
