@@ -28,8 +28,24 @@ services:
     user: "0:0"
     ports:
       - "0.0.0.0:3000:3000"
-      - "0.0.0.0:5555:5555"
     command: ["/bin/sh", "-c", "mkdir -p /app/data && chown -R 0:0 /app/data; node server.js & sleep 20; curl -s -X DELETE http://localhost:3000/api/ingest || true; sleep 3; curl -s -X POST http://localhost:3000/api/ingest || true; tail -f /dev/null"]
+
+  prisma-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prisma-studio
+    working_dir: /app
+    depends_on:
+      - news-dashboard
+    volumes:
+      - db_data:/app/data
+    networks:
+      - news-network
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:5555:5555"
+    command: ["/bin/sh", "-c", "npx prisma studio --port 5555 --hostname 0.0.0.0 --browser none"]
 
   # Optional: Add a database service if you want to use external database
   # postgres:
