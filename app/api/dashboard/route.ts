@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 import { prisma } from "@/lib/db"
 import dayjs from "dayjs"
 import type { DashboardFilters, TrendingPost, PostAnalysis } from "@/lib/types"
@@ -21,11 +23,11 @@ export async function GET(request: NextRequest) {
     console.log("[v0] Fetching dashboard data with filters:", filters)
 
     // Build where clause for filtering
+    // Include any news item whose time window overlaps the selected range
+    // i.e., firstPostDate <= to AND lastPostDate >= from
     const whereClause: any = {
-      firstPostDate: {
-        gte: filters.dateRange.from,
-        lte: filters.dateRange.to,
-      },
+      firstPostDate: { lte: filters.dateRange.to },
+      lastPostDate: { gte: filters.dateRange.from },
     }
 
     if (filters.categories.length > 0) {
@@ -53,8 +55,43 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // Fetch all posts (same shape, no top-10 limit)
+    const allNewsItems = await prisma.newsItem.findMany({
+      where: whereClause,
+      orderBy: { avgTrendingScore: "desc" },
+      include: {
+        posts: {
+          take: 1,
+          orderBy: { trendingScore: "desc" },
+        },
+      },
+    })
+
     // Transform to TrendingPost format
     const formattedTrendingPosts: TrendingPost[] = trendingPosts.map((item) => {
+      const primaryPost = item.posts[0]
+      const postAnalysis: PostAnalysis | null = item.postAnalysisJson ? JSON.parse(item.postAnalysisJson) : null
+
+      return {
+        id: item.id,
+        postText: primaryPost?.postText || "",
+        category: item.category,
+        source: item.primarySource,
+        platform: item.primaryPlatform,
+        reactions: item.totalReactions,
+        shares: item.totalShares,
+        comments: item.totalComments,
+        sourceCount: item.sourceCount,
+        postDate: item.firstPostDate,
+        postLink: primaryPost?.postLink || null,
+        postAnalysis,
+        trendingScore: item.avgTrendingScore,
+        sentiment: primaryPost?.sentiment || "neutral",
+      }
+    })
+
+    // Transform all to TrendingPost format
+    const formattedAllPosts: TrendingPost[] = allNewsItems.map((item) => {
       const primaryPost = item.posts[0]
       const postAnalysis: PostAnalysis | null = item.postAnalysisJson ? JSON.parse(item.postAnalysisJson) : null
 
@@ -87,6 +124,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       trendingPosts: formattedTrendingPosts,
+      allPosts: formattedAllPosts,
       highlightMetrics,
       chartData,
       filterOptions,

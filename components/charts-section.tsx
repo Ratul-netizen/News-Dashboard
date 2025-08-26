@@ -52,16 +52,17 @@ const ENGAGEMENT_COLORS = {
 
 export function ChartsSection({ chartData }: ChartsSectionProps) {
   // Custom tooltip component for dark theme
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
+      const item = payload[0]
+      const name = item.name ?? item.payload?.sentiment ?? "Value"
+      const value = item.value
+      const total = payload.reduce((sum: number, p: any) => sum + (typeof p.value === 'number' ? p.value : 0), 0)
+      const pct = total > 0 && typeof value === 'number' ? `${Math.round((value / total) * 100)}%` : ''
       return (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 shadow-lg">
-          <p className="text-white font-medium">{label}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} className="text-sm" style={{ color: entry.color }}>
-              {entry.name}: {typeof entry.value === "number" ? entry.value.toLocaleString() : entry.value}
-            </p>
-          ))}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 shadow-lg text-sm">
+          <div className="text-white font-medium mb-1">{name}</div>
+          <div style={{ color: item.color }}>{typeof value === 'number' ? value.toLocaleString() : value} {pct && `(${pct})`}</div>
         </div>
       )
     }
@@ -130,9 +131,7 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
-                <Legend
-                  wrapperStyle={{ color: "#D1D5DB" }}
-                />
+                <Legend wrapperStyle={{ color: "#D1D5DB" }} formatter={(value) => String(value).toLowerCase()} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>

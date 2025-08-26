@@ -23,9 +23,10 @@ import { PostAnalysisModal } from "@/components/post-analysis-modal"
 
 interface TrendingPostsTableProps {
   posts: TrendingPost[]
+  title?: string
 }
 
-export function TrendingPostsTable({ posts }: TrendingPostsTableProps) {
+export function TrendingPostsTable({ posts, title = "Top 10 Trending Posts" }: TrendingPostsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "trendingScore", desc: true }])
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
@@ -354,7 +355,7 @@ export function TrendingPostsTable({ posts }: TrendingPostsTableProps) {
             <div className="p-2 bg-blue-500/10 rounded-lg">
               <ArrowUpDown className="h-5 w-5 text-blue-500" />
             </div>
-            Top 10 Trending Posts
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent>

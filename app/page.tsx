@@ -11,6 +11,7 @@ import dayjs from "dayjs"
 
 interface DashboardData {
   trendingPosts: TrendingPost[]
+  allPosts: TrendingPost[]
   highlightMetrics: {
     mostLiked: { value: number; text: string; source: string; postLink: string | null; fullText: string; sentiment: string }
     mostShared: { value: number; text: string; source: string; postLink: string | null; fullText: string; sentiment: string }
@@ -59,6 +60,21 @@ export default function Dashboard() {
       )
     })
   }, [data?.trendingPosts, searchQuery])
+
+  const filteredAllPosts = useMemo(() => {
+    if (!data?.allPosts || !searchQuery.trim()) {
+      return data?.allPosts || []
+    }
+    const query = searchQuery.toLowerCase().trim()
+    return data.allPosts.filter((post) => {
+      return (
+        post.postText.toLowerCase().includes(query) ||
+        post.source.toLowerCase().includes(query) ||
+        post.category?.toLowerCase().includes(query) ||
+        post.platform.toLowerCase().includes(query)
+      )
+    })
+  }, [data?.allPosts, searchQuery])
 
   const filteredChartData = useMemo(() => {
     if (!data?.chartData || !searchQuery.trim()) {
@@ -195,6 +211,7 @@ export default function Dashboard() {
           <>
             <HighlightCards metrics={filteredHighlightMetrics || data.highlightMetrics} />
             <TrendingPostsTable posts={filteredPosts} />
+            <TrendingPostsTable posts={filteredAllPosts} title="All News Posts" />
             <ChartsSection chartData={filteredChartData || data.chartData} />
 
             {searchQuery.trim() && (

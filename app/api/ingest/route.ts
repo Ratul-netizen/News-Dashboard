@@ -33,27 +33,27 @@ const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.35:9051/api/
 // Transform external API post format to internal format
 function transformExternalPost(externalPost: any) {
   // Handle reactions - could be object with Total or direct number
-  let reactions = 0;
-  if (typeof externalPost.reactions === 'object' && externalPost.reactions !== null) {
-    reactions = externalPost.reactions.Total || 0;
-  } else if (typeof externalPost.reactions === 'number') {
-    reactions = externalPost.reactions;
+  let reactions = 0
+  if (typeof externalPost.reactions === "object" && externalPost.reactions !== null) {
+    reactions = Number(externalPost.reactions.Total || 0)
+  } else if (externalPost.reactions !== undefined) {
+    reactions = Number(externalPost.reactions)
   }
 
   // Handle shares - could be total_shares or shares
-  let shares = 0;
+  let shares = 0
   if (externalPost.total_shares !== undefined) {
-    shares = externalPost.total_shares;
+    shares = Number(externalPost.total_shares)
   } else if (externalPost.shares !== undefined) {
-    shares = externalPost.shares;
+    shares = Number(externalPost.shares)
   }
 
   // Handle comments - could be total_comments or comments
-  let comments = 0;
+  let comments = 0
   if (externalPost.total_comments !== undefined) {
-    comments = externalPost.total_comments;
+    comments = Number(externalPost.total_comments)
   } else if (externalPost.comments !== undefined) {
-    comments = externalPost.comments;
+    comments = Number(externalPost.comments)
   }
 
   // Handle category - could be topic array or direct category
@@ -65,36 +65,40 @@ function transformExternalPost(externalPost: any) {
   }
 
   // Handle post date - could be posted_at or post_date
-  let postDate = new Date();
+  let postDate = new Date()
   if (externalPost.posted_at) {
-    postDate = new Date(externalPost.posted_at);
+    postDate = new Date(externalPost.posted_at)
   } else if (externalPost.post_date) {
-    postDate = new Date(externalPost.post_date);
+    postDate = new Date(externalPost.post_date)
   }
 
   // Handle post link - could be post_url or post_link
-  let postLink = null;
+  let postLink = null
   if (externalPost.post_url) {
-    postLink = externalPost.post_url;
+    postLink = externalPost.post_url
   } else if (externalPost.post_link) {
-    postLink = externalPost.post_link;
+    postLink = externalPost.post_link
   }
 
   // Handle featured images - convert array to string or null
-  let featuredImages = null;
+  let featuredImages = null
   if (Array.isArray(externalPost.featured_images_path) && externalPost.featured_images_path.length > 0) {
-    featuredImages = externalPost.featured_images_path.join(',');
+    featuredImages = externalPost.featured_images_path.join(',')
   }
 
   // Handle sentiment - normalize to lowercase
-  let sentiment = "neutral";
+  let sentiment = "neutral"
   if (externalPost.sentiment) {
-    sentiment = externalPost.sentiment.toLowerCase();
+    const raw = String(externalPost.sentiment).toLowerCase()
+    if (raw.includes("positive")) sentiment = "positive"
+    else if (raw.includes("negative")) sentiment = "negative"
+    else if (raw.includes("neutral")) sentiment = "neutral"
+    else sentiment = "neutral"
   }
 
   return {
     post_id: externalPost.post_id || externalPost.id || String(Math.random()),
-    post_text: externalPost.post_text || "",
+    post_text: externalPost.post_text || externalPost.text || "",
     post_date: postDate,
     post_link: postLink,
     platform: externalPost.platform || "F",
@@ -127,10 +131,11 @@ export async function POST(request: NextRequest) {
     let allPosts: any[] = []
     let currentPage = 1
     const pageSize = 200 // Maximum page size
-    let hasMorePages = true
+    let totalPages: number | null = null
 
-    // Fetch all pages of data
-    while (hasMorePages) {
+    // Fetch all pages of data (robust loop that relies on total_pages if present, otherwise continues until empty page)
+    // Also supports APIs that return either `result` or `results` arrays
+    while (true) {
       try {
         console.log(`[v0] Fetching page ${currentPage}...`)
         
@@ -140,19 +145,36 @@ export async function POST(request: NextRequest) {
 
         const data = response.data
         
-        if (!data.result || !Array.isArray(data.result)) {
-          console.error(`[v0] Invalid response structure on page ${currentPage}:`, data)
+        const pageItems: any[] = Array.isArray(data.result)
+          ? data.result
+          : Array.isArray(data.results)
+          ? data.results
+          : []
+
+        if (pageItems.length === 0) {
+          console.log(`[v0] Page ${currentPage} returned 0 items; assuming end of data.`)
           break
         }
 
-        allPosts = allPosts.concat(data.result)
-        console.log(`[v0] Fetched ${data.result.length} posts from page ${currentPage}`)
+        allPosts = allPosts.concat(pageItems)
+        console.log(`[v0] Fetched ${pageItems.length} posts from page ${currentPage}`)
 
-        // Check if there are more pages
-        if (data.next && data.current_page < data.total_pages) {
+        // Determine total pages if provided
+        if (typeof data.total_pages === 'number') {
+          totalPages = data.total_pages
+        }
+
+        // Next page condition: prefer numerical paging info when available
+        const hasMoreByNumbers = typeof data.current_page === 'number' && typeof data.total_pages === 'number'
+          ? data.current_page < data.total_pages
+          : null
+
+        const hasMoreByLink = Boolean(data.next)
+
+        if (hasMoreByNumbers === true || hasMoreByNumbers === null && hasMoreByLink) {
           currentPage++
         } else {
-          hasMorePages = false
+          break
         }
 
         // Add a small delay between requests to be respectful
@@ -182,9 +204,14 @@ export async function POST(request: NextRequest) {
         console.log(`[v0] Processing post: ${apiPost.post_id} - ${apiPost.post_text.substring(0, 50)}...`)
         
         // Validate required fields
-        if (!apiPost.post_id || !apiPost.post_text) {
-          console.log(`[v0] Skipping post with missing required fields: post_id=${apiPost.post_id}, post_text=${apiPost.post_text ? 'present' : 'missing'}`)
+        if (!apiPost.post_id) {
+          console.log(`[v0] Skipping post with missing post_id`)
           continue
+        }
+
+        // Fallback text to avoid skipping posts entirely
+        if (!apiPost.post_text || apiPost.post_text.trim().length === 0) {
+          apiPost.post_text = `[No text] ${apiPost.source || ''}`.trim()
         }
 
         // Check if post already exists
