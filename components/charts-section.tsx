@@ -195,14 +195,14 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
         </CardContent>
       </Card>
 
-      {/* Third Row - Average Trending Score, Category Reactions, and Sentiment Distribution */}
+      {/* Third Row - Average Virality Score, Category Reactions, and Sentiment Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Average Trending Score by Category */}
+        {/* Average Virality Score by Category */}
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
               <Target className="h-5 w-5 text-yellow-500" />
-              Average Trending Score
+              Average Virality Score
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -210,7 +210,7 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
               <BarChart
                 data={chartData.newsFlow.map((item) => ({
                   category: item.category,
-                  avgScore: item.count > 0 ? (item.reactions + item.shares * 2 + item.comments * 3) / item.count : 0,
+                  avgScore: item.count > 0 ? (item.shares * 5 + item.comments * 2 + item.reactions * 1) / item.count : 0,
                 }))}
                 margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
               >

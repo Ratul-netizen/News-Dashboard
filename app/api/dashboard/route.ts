@@ -4,6 +4,7 @@ export const revalidate = 0
 import { prisma } from "@/lib/db"
 import dayjs from "dayjs"
 import type { DashboardFilters, TrendingPost, PostAnalysis } from "@/lib/types"
+import { ContentScoringService } from "@/lib/services/scoring-service"
 
 export async function GET(request: NextRequest) {
   try {
@@ -67,10 +68,58 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Transform to TrendingPost format
-    const formattedTrendingPosts: TrendingPost[] = trendingPosts.map((item) => {
+    // Initialize scoring service
+    const scoringService = new ContentScoringService()
+    
+    // Calculate max trending score for scaling
+    const maxTrendingScore = allNewsItems.length > 0 
+      ? Math.max(...allNewsItems.map(r => r.avgTrendingScore || 0))
+      : 1
+
+    // Helper function to format posts with advanced scoring
+    const formatPostWithScoring = (item: any): TrendingPost => {
       const primaryPost = item.posts[0]
       const postAnalysis: PostAnalysis | null = item.postAnalysisJson ? JSON.parse(item.postAnalysisJson) : null
+
+      // Calculate days difference from post date
+      const daysDifference = scoringService.calculateDaysDifference(item.firstPostDate)
+      
+      // Calculate virality score from post analysis
+      const viralityScore = postAnalysis 
+        ? scoringService.calculateViralityScore(JSON.stringify(postAnalysis))
+        : 1
+
+      // Calculate source weight (using estimated values for missing data)
+      const estimatedFollowers = 1000 // Default value - you may want to add this to your database
+      const estimatedPostsPerDay = scoringService.calculatePostsPerDay(
+        item.sourceCount || 1,
+        item.firstPostDate,
+        item.lastPostDate || item.firstPostDate
+      )
+      
+      const sourceWeight = scoringService.calculateSourceWeight(
+        item.totalReactions || 0,
+        estimatedFollowers,
+        estimatedPostsPerDay
+      )
+
+      // Calculate news flow weight
+      const { totalPostWeight, totalPostWeightByCategory } = scoringService.calculateNewsFlowWeight(
+        item.totalReactions || 0,
+        item.totalShares || 0,
+        item.totalComments || 0,
+        daysDifference,
+        item.category || 'Other'
+      )
+
+      // Calculate final trending score
+      const finalTrendingScore = scoringService.calculateFinalTrendingScore(
+        sourceWeight,
+        totalPostWeightByCategory,
+        scoringService.getCategoryWeight(item.category || 'Other'),
+        viralityScore,
+        maxTrendingScore
+      )
 
       return {
         id: item.id,
@@ -86,32 +135,21 @@ export async function GET(request: NextRequest) {
         postLink: primaryPost?.postLink || null,
         postAnalysis,
         trendingScore: item.avgTrendingScore,
+        // New scoring fields
+        sourceWeight,
+        newsFlowWeight: totalPostWeight,
+        newsFlowWeightByCategory: totalPostWeightByCategory,
+        viralityScore,
+        finalTrendingScore,
         sentiment: primaryPost?.sentiment || "neutral",
       }
-    })
+    }
 
-    // Transform all to TrendingPost format
-    const formattedAllPosts: TrendingPost[] = allNewsItems.map((item) => {
-      const primaryPost = item.posts[0]
-      const postAnalysis: PostAnalysis | null = item.postAnalysisJson ? JSON.parse(item.postAnalysisJson) : null
+    // Transform to TrendingPost format with advanced scoring
+    const formattedTrendingPosts: TrendingPost[] = trendingPosts.map(formatPostWithScoring)
 
-      return {
-        id: item.id,
-        postText: primaryPost?.postText || "",
-        category: item.category,
-        source: item.primarySource,
-        platform: item.primaryPlatform,
-        reactions: item.totalReactions,
-        shares: item.totalShares,
-        comments: item.totalComments,
-        sourceCount: item.sourceCount,
-        postDate: item.firstPostDate,
-        postLink: primaryPost?.postLink || null,
-        postAnalysis,
-        trendingScore: item.avgTrendingScore,
-        sentiment: primaryPost?.sentiment || "neutral",
-      }
-    })
+    // Transform all to TrendingPost format with advanced scoring
+    const formattedAllPosts: TrendingPost[] = allNewsItems.map(formatPostWithScoring)
 
     // Get highlight metrics
     const highlightMetrics = await getHighlightMetrics(whereClause)

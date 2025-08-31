@@ -26,7 +26,7 @@ interface TrendingPostsTableProps {
   title?: string
 }
 
-export function TrendingPostsTable({ posts, title = "Top 10 Trending Posts" }: TrendingPostsTableProps) {
+export function TrendingPostsTable({ posts, title = "Top 10 Viral Posts" }: TrendingPostsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "trendingScore", desc: true }])
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
@@ -264,7 +264,7 @@ export function TrendingPostsTable({ posts, title = "Top 10 Trending Posts" }: T
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           className="h-auto p-0 font-semibold text-yellow-400 hover:text-yellow-300"
         >
-          Trending Score
+          Virality Score
           {column.getIsSorted() === "asc" ? (
             <ArrowUp className="ml-2 h-4 w-4" />
           ) : column.getIsSorted() === "desc" ? (

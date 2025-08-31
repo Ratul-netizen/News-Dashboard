@@ -4,9 +4,11 @@ import { useState, useEffect, useMemo } from "react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { FilterBar } from "@/components/filter-bar"
 import { HighlightCards } from "@/components/highlight-cards"
-import { TrendingPostsTable } from "@/components/trending-posts-table"
+import { DynamicPostsTable } from "@/components/dynamic-posts-table"
+import { AnalyticsFieldsPanel } from "@/components/analytics-fields-panel"
 import { ChartsSection } from "@/components/charts-section"
 import type { DashboardFilters, TrendingPost } from "@/lib/types"
+import { ColumnConfig, ColumnConfigService } from "@/lib/services/column-config-service"
 import dayjs from "dayjs"
 
 interface DashboardData {
@@ -35,6 +37,10 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const [currentColumns, setCurrentColumns] = useState<ColumnConfig[]>(
+    ColumnConfigService.getDefaultConfiguration().columns
+  )
+  const [isAnalyticsPanelOpen, setIsAnalyticsPanelOpen] = useState(false)
   const [filters, setFilters] = useState<DashboardFilters>({
     dateRange: {
       from: dayjs().subtract(7, "days").toDate(),
@@ -145,6 +151,46 @@ export default function Dashboard() {
     }
   }, [data?.highlightMetrics, filteredPosts, searchQuery])
 
+  const handleAddColumn = (columnId: string) => {
+    const columnToAdd = ColumnConfigService.getColumnById(columnId)
+    if (columnToAdd) {
+      // Find the highest position among customizable columns
+      const maxPosition = Math.max(
+        ...currentColumns
+          .filter(col => !ColumnConfigService.isColumnFixed(col.id))
+          .map(col => col.position)
+      )
+      
+      const newColumn = { ...columnToAdd, position: maxPosition + 1 }
+      const newColumns = [...currentColumns, newColumn]
+      
+      // Sort by position
+      newColumns.sort((a, b) => a.position - b.position)
+      setCurrentColumns(newColumns)
+    }
+  }
+
+  const handleRemoveColumn = (columnId: string) => {
+    if (!ColumnConfigService.isColumnFixed(columnId)) {
+      const newColumns = currentColumns.filter(col => col.id !== columnId)
+      setCurrentColumns(newColumns)
+    }
+  }
+
+  const handleReorderColumns = (columns: ColumnConfig[]) => {
+    setCurrentColumns(columns)
+  }
+
+  const handleResetToDefault = () => {
+    setCurrentColumns(ColumnConfigService.getDefaultConfiguration().columns)
+  }
+
+  const handleSaveConfiguration = (name: string) => {
+    console.log('Saving configuration:', name, currentColumns)
+    // This would typically save to a database
+    alert(`Configuration "${name}" saved successfully!`)
+  }
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
@@ -210,8 +256,31 @@ export default function Dashboard() {
         {data && (
           <>
             <HighlightCards metrics={filteredHighlightMetrics || data.highlightMetrics} />
-            <TrendingPostsTable posts={filteredPosts} />
-            <TrendingPostsTable posts={filteredAllPosts} title="All News Posts" />
+            
+            {/* Top 10 Viral Posts Table with Dynamic Columns */}
+            <DynamicPostsTable
+              title="Top 10 Viral Posts"
+              posts={filteredPosts}
+              currentColumns={currentColumns}
+              onAddColumn={handleAddColumn}
+              onRemoveColumn={handleRemoveColumn}
+              onReorderColumns={handleReorderColumns}
+              showColumnManagement={true}
+              postsPerPage={10}
+            />
+            
+            {/* All News Posts Table with Dynamic Columns */}
+            <DynamicPostsTable
+              title="All News Posts"
+              posts={filteredAllPosts}
+              currentColumns={currentColumns}
+              onAddColumn={handleAddColumn}
+              onRemoveColumn={handleRemoveColumn}
+              onReorderColumns={handleReorderColumns}
+              showColumnManagement={false}
+              postsPerPage={15}
+            />
+            
             <ChartsSection chartData={filteredChartData || data.chartData} />
 
             {searchQuery.trim() && (
@@ -227,6 +296,17 @@ export default function Dashboard() {
           </>
         )}
       </main>
+
+      {/* Analytics Fields Panel */}
+      <AnalyticsFieldsPanel
+        currentColumns={currentColumns}
+        onAddColumn={handleAddColumn}
+        onRemoveColumn={handleRemoveColumn}
+        onResetToDefault={handleResetToDefault}
+        onSaveConfiguration={handleSaveConfiguration}
+        isOpen={isAnalyticsPanelOpen}
+        onToggle={() => setIsAnalyticsPanelOpen(!isAnalyticsPanelOpen)}
+      />
     </div>
   )
 }

@@ -67,6 +67,12 @@ export interface TrendingPost {
   postLink: string | null
   postAnalysis: PostAnalysis | null
   trendingScore: number
+  // New scoring fields
+  sourceWeight: number
+  newsFlowWeight: number
+  newsFlowWeightByCategory: number
+  viralityScore: number
+  finalTrendingScore: number
   sentiment: string
 }
 

@@ -218,7 +218,7 @@ export function PostAnalysisModal({ isOpen, onClose, postId }: PostAnalysisModal
                 </Badge>
                 <Badge className="bg-yellow-900 text-yellow-100">
                   <TrendingUp className="w-3 h-3 mr-1" />
-                  Score: {data.newsItem.avgTrendingScore.toFixed(1)}
+                  Virality: {data.newsItem.avgTrendingScore.toFixed(1)}
                 </Badge>
               </div>
 

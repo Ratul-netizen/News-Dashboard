@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 import { prisma } from "@/lib/db"
 import type { TrendingPost, PostAnalysis } from "@/lib/types"
+import { ContentScoringService } from "@/lib/services/scoring-service"
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,10 +48,58 @@ export async function GET(request: NextRequest) {
       take: limit,
     })
 
-    // Transform to TrendingPost format
+    // Initialize scoring service
+    const scoringService = new ContentScoringService()
+    
+    // Calculate max trending score for scaling
+    const maxTrendingScore = searchResults.length > 0 
+      ? Math.max(...searchResults.map(r => r.avgTrendingScore || 0))
+      : 1
+
+    // Transform to TrendingPost format with advanced scoring
     const formattedResults: TrendingPost[] = searchResults.map((item) => {
       const primaryPost = item.posts[0]
       const postAnalysis: PostAnalysis | null = item.postAnalysisJson ? JSON.parse(item.postAnalysisJson) : null
+
+      // Calculate days difference from post date
+      const daysDifference = scoringService.calculateDaysDifference(item.firstPostDate)
+      
+      // Calculate virality score from post analysis
+      const viralityScore = postAnalysis 
+        ? scoringService.calculateViralityScore(JSON.stringify(postAnalysis))
+        : 1
+
+      // Calculate source weight (using estimated values for missing data)
+      const estimatedFollowers = 1000 // Default value - you may want to add this to your database
+      const estimatedPostsPerDay = scoringService.calculatePostsPerDay(
+        item.sourceCount || 1,
+        item.firstPostDate,
+        item.lastPostDate || item.firstPostDate
+      )
+      
+      const sourceWeight = scoringService.calculateSourceWeight(
+        item.totalReactions || 0,
+        estimatedFollowers,
+        estimatedPostsPerDay
+      )
+
+      // Calculate news flow weight
+      const { totalPostWeight, totalPostWeightByCategory } = scoringService.calculateNewsFlowWeight(
+        item.totalReactions || 0,
+        item.totalShares || 0,
+        item.totalComments || 0,
+        daysDifference,
+        item.category || 'Other'
+      )
+
+      // Calculate final trending score
+      const finalTrendingScore = scoringService.calculateFinalTrendingScore(
+        sourceWeight,
+        totalPostWeightByCategory,
+        scoringService.getCategoryWeight(item.category || 'Other'),
+        viralityScore,
+        maxTrendingScore
+      )
 
       return {
         id: item.id,
@@ -66,6 +115,12 @@ export async function GET(request: NextRequest) {
         postLink: primaryPost?.postLink || null,
         postAnalysis,
         trendingScore: item.avgTrendingScore,
+        // New scoring fields
+        sourceWeight,
+        newsFlowWeight: totalPostWeight,
+        newsFlowWeightByCategory: totalPostWeightByCategory,
+        viralityScore,
+        finalTrendingScore,
         sentiment: "neutral", // Default sentiment for search results
       }
     })

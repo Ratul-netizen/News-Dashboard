@@ -112,16 +112,10 @@ function transformExternalPost(externalPost: any) {
   }
 }
 
-// Calculate trending score
+// Calculate trending score (virality): shares×5 + comments×2 + reactions×1
 function calculateTrendingScore(reactions: number, shares: number, comments: number, postDate: Date): number {
-  // Weight different engagement types
-  const engagementScore = reactions * 1 + shares * 2 + comments * 3
-
-  // Apply time decay (newer posts get higher scores)
-  const hoursOld = (Date.now() - postDate.getTime()) / (1000 * 60 * 60)
-  const timeDecay = Math.exp(-hoursOld / 24) // Decay over 24 hours
-
-  return engagementScore * timeDecay
+  const score = shares * 5 + comments * 2 + reactions * 1
+  return score
 }
 
 export async function POST(request: NextRequest) {
