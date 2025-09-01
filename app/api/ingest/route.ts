@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import axios from "axios"
 import { prisma } from "../../../lib/db"
+import { calculateJaccardSimilarity, generateBaseKey } from "../../../lib/utils/text-similarity"
 
 // Clear all data endpoint
 export async function DELETE(request: NextRequest) {
@@ -287,40 +288,125 @@ export async function POST(request: NextRequest) {
     // Create news items from posts
     console.log("[v0] Creating news items...")
     
-    // Group posts by source and category
-    const postsByGroup = await prisma.post.groupBy({
-      by: ['source', 'category'],
-      _count: { id: true },
-      _sum: {
-        reactions: true,
-        shares: true,
-        comments: true,
-        trendingScore: true,
-      },
-      _min: { postDate: true },
-      _max: { postDate: true },
+    // Get all posts for analysis
+    const dbPosts = await prisma.post.findMany({
+      orderBy: { postDate: 'desc' },
+      take: 1000, // Limit to recent posts for performance
     })
-
-    for (const group of postsByGroup) {
-      try {
-        const posts = await prisma.post.findMany({
-          where: {
-            source: group.source,
-            category: group.category,
-          },
-          orderBy: { trendingScore: 'desc' },
+    
+    // Group posts by content similarity and source/category
+    const newsGroups: Array<{
+      baseKey: string
+      category: string
+      sources: Set<string>
+      platforms: Set<string>
+      posts: Array<{
+        id: string
+        postText: string
+        source: string
+        platform: string
+        postDate: Date
+        reactions: number
+        shares: number
+        comments: number
+        trendingScore: number
+        sentiment: string
+        postLink: string | null
+        category: string | null
+      }>
+      totalReactions: number
+      totalShares: number
+      totalComments: number
+      avgTrendingScore: number
+      firstPostDate: Date
+      lastPostDate: Date
+    }> = []
+    
+    // Process each post to find similar content
+    for (const post of dbPosts) {
+      let addedToGroup = false
+      
+      // Check if post can be added to existing group
+      for (const group of newsGroups) {
+        const similarity = calculateJaccardSimilarity(post.postText, group.posts[0].postText)
+        
+        // If similar content and same category, add to group
+        if (similarity >= 0.3 && (post.category || 'uncategorized') === group.category) {
+          group.posts.push({
+            id: post.id,
+            postText: post.postText,
+            source: post.source,
+            platform: post.platform,
+            postDate: post.postDate,
+            reactions: post.reactions,
+            shares: post.shares,
+            comments: post.comments,
+            trendingScore: post.trendingScore,
+            sentiment: post.sentiment || 'neutral',
+            postLink: post.postLink,
+            category: post.category,
+          })
+          group.sources.add(post.source)
+          group.platforms.add(post.platform)
+          group.totalReactions += post.reactions
+          group.totalShares += post.shares
+          group.totalComments += post.comments
+          group.avgTrendingScore = (group.avgTrendingScore + post.trendingScore) / 2
+          group.firstPostDate = new Date(Math.min(group.firstPostDate.getTime(), post.postDate.getTime()))
+          group.lastPostDate = new Date(Math.max(group.lastPostDate.getTime(), post.postDate.getTime()))
+          addedToGroup = true
+          break
+        }
+      }
+      
+      // If no similar group found, create new group
+      if (!addedToGroup) {
+        const baseKey = generateBaseKey(post.postText)
+        newsGroups.push({
+          baseKey,
+          category: post.category || 'uncategorized',
+          sources: new Set([post.source]),
+          platforms: new Set([post.platform]),
+          posts: [{
+            id: post.id,
+            postText: post.postText,
+            source: post.source,
+            platform: post.platform,
+            postDate: post.postDate,
+            reactions: post.reactions,
+            shares: post.shares,
+            comments: post.comments,
+            trendingScore: post.trendingScore,
+            sentiment: post.sentiment || 'neutral',
+            postLink: post.postLink,
+            category: post.category,
+          }],
+          totalReactions: post.reactions,
+          totalShares: post.shares,
+          totalComments: post.comments,
+          avgTrendingScore: post.trendingScore,
+          firstPostDate: post.postDate,
+          lastPostDate: post.postDate,
         })
+      }
+    }
+
+    for (const group of newsGroups) {
+      try {
+        const posts = group.posts
+        const sources = Array.from(group.sources)
+        const platforms = Array.from(group.platforms)
 
         if (posts.length === 0) continue
 
-        const totalReactions = group._sum.reactions || 0
-        const totalShares = group._sum.shares || 0
-        const totalComments = group._sum.comments || 0
-        const avgTrendingScore = (group._sum.trendingScore || 0) / group._count.id
-        const firstPostDate = group._min.postDate || new Date()
-        const lastPostDate = group._max.postDate || new Date()
+        const totalReactions = group.totalReactions
+        const totalShares = group.totalShares
+        const totalComments = group.totalComments
+        const avgTrendingScore = group.avgTrendingScore
+        const firstPostDate = group.firstPostDate
+        const lastPostDate = group.lastPostDate
 
-        const groupKey = `${group.source}_${group.category || 'uncategorized'}_${firstPostDate.toISOString().split('T')[0]}`
+        const groupKey = `${group.baseKey}_${firstPostDate.toISOString().split('T')[0]}`
 
         // Create or update news item
         const newsItem = await prisma.newsItem.upsert({
@@ -330,20 +416,20 @@ export async function POST(request: NextRequest) {
           create: {
             groupKey: groupKey,
             category: group.category || 'uncategorized',
-            primarySource: group.source,
-            primaryPlatform: posts[0].platform,
+            primarySource: sources[0],
+            primaryPlatform: platforms[0],
             totalReactions,
             totalShares,
             totalComments,
-            sourceCount: 1,
-            platformCount: 1,
-            postCount: group._count.id,
+            sourceCount: sources.length,
+            platformCount: platforms.length,
+            postCount: posts.length,
             avgTrendingScore,
             firstPostDate,
             lastPostDate,
             postAnalysisJson: JSON.stringify({
-              sources: [group.source],
-              platforms: [posts[0].platform],
+              sources: sources,
+              platforms: platforms,
               sampleTexts: posts.slice(0, 3).map(p => p.postText),
               postLinks: posts.map(p => p.postLink).filter(Boolean),
               totalEngagement: totalReactions + totalShares + totalComments,
@@ -358,17 +444,17 @@ export async function POST(request: NextRequest) {
             totalReactions,
             totalShares,
             totalComments,
-            postCount: group._count.id,
+            postCount: posts.length,
             avgTrendingScore,
             lastPostDate,
             postAnalysisJson: JSON.stringify({
-              sources: [group.source],
-              platforms: [posts[0].platform],
+              sources: sources,
+              platforms: platforms,
               sampleTexts: posts.slice(0, 3).map(p => p.postText),
               postLinks: posts.map(p => p.postLink).filter(Boolean),
               totalEngagement: totalReactions + totalShares + totalComments,
               sentimentBreakdown: {
-                positive: posts.filter(p => p.sentiment === "positive").length,
+                positive: posts.filter(p => p.sentiment === "neutral").length,
                 neutral: posts.filter(p => p.sentiment === "neutral").length,
                 negative: posts.filter(p => p.sentiment === "negative").length,
               },
@@ -379,13 +465,7 @@ export async function POST(request: NextRequest) {
         // Link all posts in this group to the news item
         await prisma.post.updateMany({
           where: {
-            source: group.source,
-            category: group.category,
-            // Only link posts from the same date range
-            postDate: {
-              gte: firstPostDate,
-              lte: lastPostDate,
-            },
+            id: { in: posts.map(p => p.id) },
           },
           data: {
             newsItemId: newsItem.id,
@@ -394,7 +474,7 @@ export async function POST(request: NextRequest) {
 
         newsItemsCreated++
       } catch (error) {
-        console.error(`[v0] Error creating news item for ${group.source}_${group.category}:`, error)
+        console.error(`[v0] Error creating news item for ${group.baseKey}:`, error)
       }
     }
 

@@ -21,6 +21,8 @@ import {
 } from 'lucide-react'
 import type { TrendingPost } from '@/lib/types'
 import dayjs from 'dayjs'
+import { RelatedPostsPanel } from './related-posts-panel'
+import { useState, useEffect } from 'react'
 
 interface SimplePostAnalysisModalProps {
   isOpen: boolean
@@ -29,6 +31,33 @@ interface SimplePostAnalysisModalProps {
 }
 
 export function SimplePostAnalysisModal({ isOpen, onClose, post }: SimplePostAnalysisModalProps) {
+  const [relatedPosts, setRelatedPosts] = useState<TrendingPost[]>([])
+  const [loadingRelated, setLoadingRelated] = useState(false)
+
+  // Fetch related posts when modal opens
+  useEffect(() => {
+    if (isOpen && post) {
+      fetchRelatedPosts()
+    }
+  }, [isOpen, post])
+
+  const fetchRelatedPosts = async () => {
+    if (!post) return
+    
+    try {
+      setLoadingRelated(true)
+      const response = await fetch(`/api/posts/related/${post.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setRelatedPosts(data.data.relatedPosts || [])
+      }
+    } catch (error) {
+      console.error('Error fetching related posts:', error)
+    } finally {
+      setLoadingRelated(false)
+    }
+  }
+
   if (!post) return null
 
   const formatNumber = (num: number) => {
@@ -258,6 +287,28 @@ export function SimplePostAnalysisModal({ isOpen, onClose, post }: SimplePostAna
                   </Card>
                 </div>
               </>
+            )}
+
+            {/* Related Posts Panel */}
+            {post.postAnalysis && (
+              <RelatedPostsPanel
+                relatedPosts={relatedPosts}
+                sources={post.postAnalysis.sources}
+                platforms={post.postAnalysis.platforms}
+                onPostClick={(relatedPost) => {
+                  // Handle related post click
+                  console.log('Related post clicked:', relatedPost)
+                }}
+              />
+            )}
+            
+            {/* Loading State for Related Posts */}
+            {loadingRelated && (
+              <Card className="bg-gray-800 border-gray-700">
+                <CardContent className="p-6 text-center">
+                  <div className="text-gray-400">Loading related posts...</div>
+                </CardContent>
+              </Card>
             )}
           </div>
         </ScrollArea>
