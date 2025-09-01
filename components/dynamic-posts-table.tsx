@@ -99,8 +99,11 @@ export function DynamicPostsTable({
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    // Scroll to top of table when changing pages
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    // Scroll to the table container instead of page top
+    const tableContainer = document.querySelector(`[data-table-title="${title}"]`)
+    if (tableContainer) {
+      tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   }
 
   const handleOpenPostAnalysis = (post: TrendingPost) => {
@@ -310,7 +313,7 @@ export function DynamicPostsTable({
 
   return (
     <div>
-      <Card className="bg-[#1E1E1E] border-gray-700 text-white">
+      <Card className="bg-[#1E1E1E] border-gray-700 text-white" data-table-title={title}>
         <CardHeader className="bg-[#1E1E1E] border-b border-gray-700">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-white">
