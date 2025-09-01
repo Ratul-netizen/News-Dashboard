@@ -156,10 +156,14 @@ export default function Dashboard() {
   const handleAddColumn = (columnId: string) => {
     const columnToAdd = ColumnConfigService.getColumnById(columnId)
     if (columnToAdd) {
-      // Find the highest position among customizable columns
+      // Position new column after the Source column (position 4)
+      const sourceColumnPosition = 4
+      
+      // Find the highest position among customizable columns that come after Source
       const maxPosition = Math.max(
+        sourceColumnPosition,
         ...currentColumns
-          .filter(col => !ColumnConfigService.isColumnFixed(col.id))
+          .filter(col => !ColumnConfigService.isColumnFixed(col.id) && col.position > sourceColumnPosition)
           .map(col => col.position)
       )
       
