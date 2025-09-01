@@ -2,70 +2,54 @@ version: '3.8'
 
 services:
   news-dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: news-dashboard-app
-    environment:
-      - NODE_ENV=production
-      - HOSTNAME=0.0.0.0
-      - PORT=3000
-      - NEXT_TELEMETRY_DISABLED=1
-      - EXTERNAL_API_URL=http://192.168.100.35:9051/api/posts/
+    build: .
+    container_name: news-dashboard
+    ports:
+      - "3000:3000"
+      - "5555:5555"
+    env_file:
+      - docker.env
     volumes:
-      - ./scripts:/app/scripts:ro
-      - db_data:/app/data
-      - ./scripts/startup.sh:/app/startup.sh:ro
+      # Persist database between container restarts
+      - ./prisma:/app/prisma
+      # Persist node_modules for faster rebuilds
+      - /app/node_modules
+      # Persist .next build cache
+      - /app/.next
     networks:
       - news-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-    user: "0:0"
-    ports:
-      - "0.0.0.0:3000:3000"
-    command: ["/bin/sh", "-c", "mkdir -p /app/data && chown -R 0:0 /app/data; node server.js & sleep 20; curl -s -X DELETE http://localhost:3000/api/ingest || true; sleep 3; curl -s -X POST http://localhost:3000/api/ingest || true; tail -f /dev/null"]
-
-  prisma-studio:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: prisma-studio
-    working_dir: /app
+      start_period: 60s
     depends_on:
-      - news-dashboard
-    volumes:
-      - db_data:/app/data
+      - external-api-check
+
+  # Service to check if external API is accessible
+  external-api-check:
+    image: curlimages/curl:latest
+    container_name: external-api-check
+    command: >
+      sh -c "
+        echo '🔍 Checking external API accessibility...' &&
+        until curl -f 'http://192.168.100.35:9051/api/posts/?page=1&page_size=200'; do
+          echo '⏳ External API not ready, waiting...' &&
+          sleep 10
+        done &&
+        echo '✅ External API is accessible!' &&
+        exit 0
+      "
     networks:
       - news-network
-    restart: unless-stopped
-    ports:
-      - "0.0.0.0:5555:5555"
-    command: ["/bin/sh", "-c", "npx prisma studio --port 5555 --hostname 0.0.0.0 --browser none"]
-
-  # Optional: Add a database service if you want to use external database
-  # postgres:
-  #   image: postgres:15-alpine
-  #   container_name: news-dashboard-db
-  #   environment:
-  #     POSTGRES_DB: news_dashboard
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: password
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   networks:
-  #     - news-network
-  #   restart: unless-stopped
-  #   ports:
-  #     - "0.0.0.0:5432:5432
+    restart: "no"
 
 networks:
   news-network:
     driver: bridge
 
 volumes:
-  db_data:
+  prisma-data:
+    driver: local

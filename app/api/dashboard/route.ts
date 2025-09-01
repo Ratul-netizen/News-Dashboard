@@ -8,6 +8,17 @@ import { ContentScoringService } from "@/lib/services/scoring-service"
 
 export async function GET(request: NextRequest) {
   try {
+    // Check if database is accessible
+    try {
+      await prisma.$connect()
+    } catch (dbError) {
+      console.error("[v0] Database connection failed:", dbError)
+      return NextResponse.json({ 
+        error: "Database not ready. Please wait for initialization to complete.",
+        status: "initializing"
+      }, { status: 503 })
+    }
+
     const { searchParams } = new URL(request.url)
 
     // Parse filters from query parameters

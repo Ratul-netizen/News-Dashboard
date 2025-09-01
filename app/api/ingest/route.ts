@@ -28,7 +28,7 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.35:9051/api/posts/"
+const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.35:9051/api/posts/?page=1&page_size=200"
 
 // Transform external API post format to internal format
 function transformExternalPost(externalPost: any) {
@@ -158,16 +158,30 @@ export async function POST(request: NextRequest) {
           totalPages = data.total_pages
         }
 
+        // Debug: Log pagination info
+        console.log(`[v0] Page ${currentPage} - current_page: ${data.current_page}, total_pages: ${data.total_pages}, has_next: ${Boolean(data.next)}`)
+        
+        // Force stop after 3 pages since API lies about pagination
+        if (currentPage >= 3) {
+          console.log(`[v0] Force stopping at page ${currentPage} (API limit reached)`)
+          break
+        }
+        
         // Next page condition: prefer numerical paging info when available
         const hasMoreByNumbers = typeof data.current_page === 'number' && typeof data.total_pages === 'number'
           ? data.current_page < data.total_pages
           : null
 
-        const hasMoreByLink = Boolean(data.next)
+        // Only use link-based pagination if we don't have numerical info
+        const hasMoreByLink = hasMoreByNumbers === null && Boolean(data.next)
 
-        if (hasMoreByNumbers === true || hasMoreByNumbers === null && hasMoreByLink) {
+        console.log(`[v0] hasMoreByNumbers: ${hasMoreByNumbers}, hasMoreByLink: ${hasMoreByLink}`)
+
+        if (hasMoreByNumbers === true || hasMoreByLink) {
           currentPage++
+          console.log(`[v0] Continuing to page ${currentPage}`)
         } else {
+          console.log(`[v0] Stopping pagination at page ${currentPage}`)
           break
         }
 

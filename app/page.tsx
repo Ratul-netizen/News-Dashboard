@@ -41,6 +41,8 @@ export default function Dashboard() {
     ColumnConfigService.getDefaultConfiguration().columns
   )
   const [isAnalyticsPanelOpen, setIsAnalyticsPanelOpen] = useState(false)
+  const [isIngesting, setIsIngesting] = useState(false)
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [filters, setFilters] = useState<DashboardFilters>({
     dateRange: {
       from: dayjs().subtract(7, "days").toDate(),
@@ -202,11 +204,18 @@ export default function Dashboard() {
         ...(filters.platforms.length > 0 && { platforms: filters.platforms.join(",") }),
       })
 
-      const response = await fetch(`/api/dashboard?${params}`)
+      const response = await fetch(`/api/dashboard?${params}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
       if (!response.ok) throw new Error("Failed to fetch dashboard data")
 
       const dashboardData = await response.json()
       setData(dashboardData)
+      setLastRefresh(new Date())
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
     } finally {
@@ -216,12 +225,28 @@ export default function Dashboard() {
 
   const handleManualRefresh = async () => {
     try {
+      setIsIngesting(true)
+      console.log('🔄 Starting manual data refresh...')
+      
       // Trigger data ingestion
-      await fetch("/api/ingest", { method: "POST" })
+      const ingestResponse = await fetch("/api/ingest", { method: "POST" })
+      if (!ingestResponse.ok) {
+        throw new Error(`Ingest failed: ${ingestResponse.statusText}`)
+      }
+      
+      const ingestResult = await ingestResponse.json()
+      console.log('✅ Data ingestion completed:', ingestResult)
+      
       // Refresh dashboard data
       await fetchDashboardData()
+      setLastRefresh(new Date())
+      
+      console.log('🎉 Manual refresh completed successfully!')
     } catch (error) {
-      console.error("Error refreshing data:", error)
+      console.error("❌ Error refreshing data:", error)
+      alert(`Failed to refresh data: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsIngesting(false)
     }
   }
 
@@ -232,6 +257,16 @@ export default function Dashboard() {
   useEffect(() => {
     fetchDashboardData()
   }, [filters])
+
+  // Auto-refresh data every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refreshing dashboard data...')
+      fetchDashboardData()
+    }, 5 * 60 * 1000) // 5 minutes
+
+    return () => clearInterval(interval)
+  }, [])
 
   if (loading && !data) {
     return (
