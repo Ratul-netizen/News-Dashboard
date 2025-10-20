@@ -60,7 +60,8 @@ news-dashboard/
 
 ```env
 # External API URL - UPDATE THIS TO YOUR ACTUAL API
-EXTERNAL_API_URL=http://192.168.100.35:9051/api/posts/?page=1&page_size=200
+EXTERNAL_API_URL=http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F
+EXTERNAL_SOURCES_API_URL=http://192.168.100.35:9051/api/sources/?page=1&page_size=1000&platform=F
 
 # Database settings
 DATABASE_URL=file:./prisma/dev.db
@@ -129,7 +130,7 @@ docker-compose exec news-dashboard tail -f /var/log/cron.log
 #### 1. External API Not Accessible
 ```bash
 # Check if external API is reachable
-curl "http://192.168.100.35:9051/api/posts/?page=1&page_size=200"
+curl "http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F"
 
 # Update docker.env with correct URL
 # Rebuild container

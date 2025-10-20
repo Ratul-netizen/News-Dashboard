@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   news-dashboard:
     build: .
@@ -25,26 +23,28 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    depends_on:
-      - external-api-check
+    # Temporarily disabled due to Docker Hub authentication issues
+    # depends_on:
+    #   - external-api-check
 
-  # Service to check if external API is accessible
-  external-api-check:
-    image: curlimages/curl:latest
-    container_name: external-api-check
-    command: >
-      sh -c "
-        echo '🔍 Checking external API accessibility...' &&
-        until curl -f 'http://192.168.100.35:9051/api/posts/?page=1&page_size=200'; do
-          echo '⏳ External API not ready, waiting...' &&
-          sleep 10
-        done &&
-        echo '✅ External API is accessible!' &&
-        exit 0
-      "
-    networks:
-      - news-network
-    restart: "no"
+  # Service to check if external API is accessible - temporarily disabled
+  # external-api-check:
+  #   image: alpine:latest
+  #   container_name: external-api-check
+  #   command: >
+  #     sh -c "
+  #       apk add --no-cache curl &&
+  #       echo '🔍 Checking external API accessibility...' &&
+  #       until curl -f 'http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F'; do
+  #         echo '⏳ External API not ready, waiting...' &&
+  #         sleep 10
+  #       done &&
+  #       echo '✅ External API is accessible!' &&
+  #       exit 0
+  #     "
+  #   networks:
+  #     - news-network
+  #   restart: "no"
 
 networks:
   news-network:

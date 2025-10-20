@@ -19,11 +19,11 @@ echo "✅ Docker environment check passed"
 
 # Check if external API is accessible
 echo "🔍 Checking external API accessibility..."
-if curl -f http://192.168.100.35:9051/api/posts/ > /dev/null 2>&1; then
+if curl -f "http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F" > /dev/null 2>&1; then
     echo "✅ External API is accessible"
 else
     echo "⚠️  Warning: External API not accessible. You may need to update the URL in docker.env"
-    echo "   Current URL: http://192.168.100.35:9051/api/posts/"
+    echo "   Current URL: http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F"
     read -p "   Do you want to continue anyway? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then

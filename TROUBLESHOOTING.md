@@ -15,7 +15,7 @@
   ```
 
 ### 2. External API Connection Issues
-- **Problem**: Cannot connect to external API at `http://192.168.100.35:9051/api/posts/?page=1&page_size=200`
+- **Problem**: Cannot connect to external API at `http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F`
 - **Solution**: 
   - Check if the external API server is running
   - Verify the IP address and port are correct
@@ -104,7 +104,8 @@ Create a `.env.local` file in your project root:
 
 ```env
 # External API URL (update this to your actual API endpoint)
-EXTERNAL_API_URL=http://192.168.100.35:9051/api/posts/?page=1&page_size=200
+EXTERNAL_API_URL=http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F
+EXTERNAL_SOURCES_API_URL=http://192.168.100.35:9051/api/sources/?page=1&page_size=1000&platform=F
 
 # Database URL (SQLite by default)
 DATABASE_URL="file:./prisma/dev.db"

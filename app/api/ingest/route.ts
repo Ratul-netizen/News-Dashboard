@@ -11,6 +11,7 @@ export async function DELETE(request: NextRequest) {
     // Clear all data
     await prisma.post.deleteMany()
     await prisma.newsItem.deleteMany()
+    await (prisma as any).source.deleteMany()
     await prisma.dailyAgg.deleteMany()
     await prisma.dataIngestionLog.deleteMany()
     
@@ -29,7 +30,98 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.35:9051/api/posts/?page=1&page_size=200"
+const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.35:9051/api/posts/"
+const SOURCES_API_URL = process.env.EXTERNAL_SOURCES_API_URL || "http://192.168.100.35:9051/api/sources/"
+const AUTH_URL = process.env.EXTERNAL_AUTH_URL
+const API_EMAIL = process.env.EXTERNAL_API_EMAIL
+const API_PASSWORD = process.env.EXTERNAL_API_PASSWORD
+const STATIC_API_TOKEN = process.env.EXTERNAL_API_TOKEN
+const AUTH_SCHEME_OVERRIDE = process.env.EXTERNAL_AUTH_SCHEME // e.g. "Token" or "Bearer"
+
+// Build a paged URL from a base that may already contain query params
+function buildPagedUrl(baseUrl: string, page: number, pageSize: number): string {
+  try {
+    const url = new URL(baseUrl)
+    url.searchParams.set("page", String(page))
+    url.searchParams.set("page_size", String(pageSize))
+    return url.toString()
+  } catch {
+    const separator = baseUrl.includes("?") ? "&" : "?"
+    return `${baseUrl}${separator}page=${page}&page_size=${pageSize}`
+  }
+}
+
+// Resolve auth headers for external API.
+// Supports either a static token via env or a login flow returning a token.
+async function getExternalApiAuthHeaders(): Promise<Record<string, string>> {
+  // If user set a static token, prefer it.
+  if (STATIC_API_TOKEN && STATIC_API_TOKEN.trim().length > 0) {
+    return { Authorization: `Bearer ${STATIC_API_TOKEN}` }
+  }
+
+  // Otherwise, try logging in if creds and auth URL are provided
+  if (AUTH_URL && API_EMAIL && API_PASSWORD) {
+    try {
+      const resp = await axios.post(AUTH_URL, {
+        email: API_EMAIL,
+        username: API_EMAIL,
+        password: API_PASSWORD,
+      }, { timeout: 30000 })
+
+      const data = resp.data || {}
+      const token = data.access || data.token || data.auth_token || data.key
+      if (!token) {
+        console.warn("[v0] Auth response did not include a token. Response keys:", Object.keys(data))
+        return {}
+      }
+
+      // Try env override first, then response token_type, else Bearer
+      const scheme = AUTH_SCHEME_OVERRIDE || data.token_type || "Bearer"
+      return { Authorization: `${scheme} ${token}` }
+    } catch (e) {
+      console.warn("[v0] External API authentication failed:", e instanceof Error ? e.message : e)
+      return {}
+    }
+  }
+
+  return {}
+}
+
+// Always attempt login and return headers, ignoring static token.
+async function getExternalApiAuthHeadersForceLogin(): Promise<Record<string, string>> {
+  if (AUTH_URL && API_EMAIL && API_PASSWORD) {
+    try {
+      const resp = await axios.post(AUTH_URL, {
+        email: API_EMAIL,
+        username: API_EMAIL,
+        password: API_PASSWORD,
+      }, { timeout: 30000 })
+      const data = resp.data || {}
+      const token = data.access || data.token || data.auth_token || data.key
+      if (!token) return {}
+      const scheme = AUTH_SCHEME_OVERRIDE || data.token_type || "Bearer"
+      return { Authorization: `${scheme} ${token}` }
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+// Helper: make an authenticated GET with a one-time re-login on 401
+async function getWithAuth(url: string, timeoutMs: number) {
+  const headers = await getExternalApiAuthHeaders()
+  try {
+    return await axios.get(url, { timeout: timeoutMs, headers })
+  } catch (err: any) {
+    const status = err?.response?.status
+    if (status === 401) {
+      const retryHeaders = await getExternalApiAuthHeadersForceLogin()
+      return await axios.get(url, { timeout: timeoutMs, headers: retryHeaders })
+    }
+    throw err
+  }
+}
 
 // Transform external API post format to internal format
 function transformExternalPost(externalPost: any) {
@@ -113,6 +205,21 @@ function transformExternalPost(externalPost: any) {
   }
 }
 
+// Transform external API source format to internal format
+function transformExternalSource(externalSource: any) {
+  return {
+    source_id: externalSource.source_id || externalSource.id || String(Math.random()),
+    name: externalSource.name || externalSource.source_name || "Unknown",
+    platform: externalSource.platform || "F",
+    url: externalSource.url || externalSource.source_url || null,
+    description: externalSource.description || null,
+    category: externalSource.category || null,
+    is_active: externalSource.is_active !== false, // Default to true if not specified
+    created_at: externalSource.created_at ? new Date(externalSource.created_at) : new Date(),
+    updated_at: externalSource.updated_at ? new Date(externalSource.updated_at) : new Date(),
+  }
+}
+
 // Calculate trending score (virality): shares×5 + comments×2 + reactions×1
 function calculateTrendingScore(reactions: number, shares: number, comments: number, postDate: Date): number {
   const score = shares * 5 + comments * 2 + reactions * 1
@@ -125,7 +232,7 @@ export async function POST(request: NextRequest) {
 
     let allPosts: any[] = []
     let currentPage = 1
-    const pageSize = 200 // Maximum page size
+    const pageSize = 1000 // Maximum page size
     let totalPages: number | null = null
 
     // Fetch all pages of data (robust loop that relies on total_pages if present, otherwise continues until empty page)
@@ -134,9 +241,7 @@ export async function POST(request: NextRequest) {
       try {
         console.log(`[v0] Fetching page ${currentPage}...`)
         
-        const response = await axios.get(`${API_URL}?page=${currentPage}&page_size=${pageSize}`, {
-      timeout: 30000, // 30 second timeout
-    })
+        const response = await getWithAuth(buildPagedUrl(API_URL, currentPage, pageSize), 30000)
 
         const data = response.data
         
@@ -197,8 +302,61 @@ export async function POST(request: NextRequest) {
 
     console.log(`[v0] Total posts fetched: ${allPosts.length}`)
 
+    // Fetch sources data
+    console.log("[v0] Fetching sources data...")
+    let allSources: any[] = []
+    let currentSourcePage = 1
+    const sourcePageSize = 1000
+
+    while (true) {
+      try {
+        console.log(`[v0] Fetching sources page ${currentSourcePage}...`)
+        
+        const sourcesResponse = await getWithAuth(buildPagedUrl(SOURCES_API_URL, currentSourcePage, sourcePageSize), 30000)
+
+        const sourcesData = sourcesResponse.data
+        
+        const pageSources: any[] = Array.isArray(sourcesData.result)
+          ? sourcesData.result
+          : Array.isArray(sourcesData.results)
+          ? sourcesData.results
+          : []
+
+        if (pageSources.length === 0) {
+          console.log(`[v0] Sources page ${currentSourcePage} returned 0 items; assuming end of data.`)
+          break
+        }
+
+        allSources = allSources.concat(pageSources)
+        console.log(`[v0] Fetched ${pageSources.length} sources from page ${currentSourcePage}`)
+
+        // Check if there are more pages
+        if (typeof sourcesData.current_page === 'number' && typeof sourcesData.total_pages === 'number') {
+          if (sourcesData.current_page < sourcesData.total_pages) {
+            currentSourcePage++
+          } else {
+            break
+          }
+        } else if (sourcesData.next) {
+          currentSourcePage++
+        } else {
+          break
+        }
+
+        // Add a small delay between requests
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+      } catch (error) {
+        console.error(`[v0] Error fetching sources page ${currentSourcePage}:`, error)
+        break
+      }
+    }
+
+    console.log(`[v0] Total sources fetched: ${allSources.length}`)
+
     // Transform external API format to internal format
     const transformedPosts = allPosts.map(transformExternalPost)
+    const transformedSources = allSources.map(transformExternalSource)
     
     // Debug: Log a few transformed posts to see the structure
     console.log("[v0] Sample transformed post:", JSON.stringify(transformedPosts[0], null, 2))
@@ -206,6 +364,7 @@ export async function POST(request: NextRequest) {
     let postsProcessed = 0
     let newsItemsCreated = 0
     let newsItemsUpdated = 0
+    let sourcesProcessed = 0
 
     // Process each post
     for (const apiPost of transformedPosts) {
@@ -282,6 +441,64 @@ export async function POST(request: NextRequest) {
         if (error instanceof Error && error.message && error.message.includes('Unique constraint')) {
           console.error(`[v0] Unique constraint violation for post ${apiPost.post_id}`)
         }
+      }
+    }
+
+    // Process each source
+    console.log("[v0] Processing sources...")
+    for (const apiSource of transformedSources) {
+      try {
+        console.log(`[v0] Processing source: ${apiSource.source_id} - ${apiSource.name}`)
+        
+        // Validate required fields
+        if (!apiSource.source_id) {
+          console.log(`[v0] Skipping source with missing source_id`)
+          continue
+        }
+
+        // Check if source already exists
+        const existingSource = await (prisma as any).source.findUnique({
+          where: { sourceId: apiSource.source_id },
+        })
+
+        if (existingSource) {
+          console.log(`[v0] Updating existing source: ${apiSource.source_id}`)
+          // Update existing source
+          await (prisma as any).source.update({
+            where: { sourceId: apiSource.source_id },
+            data: {
+              name: apiSource.name,
+              platform: apiSource.platform,
+              url: apiSource.url,
+              description: apiSource.description,
+              category: apiSource.category,
+              isActive: apiSource.is_active,
+              updatedAt: apiSource.updated_at,
+            },
+          })
+        } else {
+          console.log(`[v0] Creating new source: ${apiSource.source_id}`)
+          // Create new source
+          await (prisma as any).source.create({
+            data: {
+              sourceId: apiSource.source_id,
+              name: apiSource.name,
+              platform: apiSource.platform,
+              url: apiSource.url,
+              description: apiSource.description,
+              category: apiSource.category,
+              isActive: apiSource.is_active,
+              createdAt: apiSource.created_at,
+              updatedAt: apiSource.updated_at,
+            },
+          })
+        }
+
+        sourcesProcessed++
+        console.log(`[v0] Successfully processed source ${sourcesProcessed}/${transformedSources.length}`)
+      } catch (error) {
+        console.error(`[v0] Error processing source ${apiSource.source_id}:`, error)
+        console.error(`[v0] Source data:`, JSON.stringify(apiSource, null, 2))
       }
     }
 
@@ -479,16 +696,18 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[v0] Data ingestion completed: ${postsProcessed} posts processed, ${newsItemsCreated} news items created`,
+      `[v0] Data ingestion completed: ${postsProcessed} posts processed, ${sourcesProcessed} sources processed, ${newsItemsCreated} news items created`,
     )
 
     return NextResponse.json({
       success: true,
       message: "Data ingested and stored successfully",
       data: {
-      postsProcessed,
-      newsItemsCreated,
+        postsProcessed,
+        sourcesProcessed,
+        newsItemsCreated,
         totalPosts: transformedPosts.length,
+        totalSources: transformedSources.length,
       }
     })
 

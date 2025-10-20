@@ -82,8 +82,8 @@ EOF
     # Install cron job
     crontab /tmp/crontab
     
-    # Start cron daemon
-    crond -f -d 8 &
+    # Start cron daemon (use -b to run in background; some builds lack -l)
+    crond -b
     
     echo "✅ Cron jobs configured and started"
 }
@@ -93,7 +93,7 @@ monitor_cron() {
     while true; do
         if ! pgrep crond > /dev/null; then
             echo "⚠️ Cron daemon stopped, restarting..."
-            crond -f -d 8 &
+            crond -b
         fi
         sleep 60
     done

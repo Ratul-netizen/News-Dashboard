@@ -78,10 +78,26 @@ model DailyAgg {
   @@map("daily_aggregations")
 }
 
+model Source {
+  id                    String   @id @default(cuid())
+  sourceId              String   @unique
+  name                  String
+  platform              String
+  url                   String?
+  description           String?
+  category              String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@map("sources")
+}
+
 model DataIngestionLog {
   id                    String   @id @default(cuid())
   timestamp             DateTime @default(now())
   postsProcessed        Int      @default(0)
+  sourcesProcessed      Int      @default(0)
   newsItemsCreated      Int      @default(0)
   newsItemsUpdated      Int      @default(0)
   status                String   // SUCCESS, ERROR, PARTIAL

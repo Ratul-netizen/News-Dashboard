@@ -22,12 +22,12 @@ echo ✅ Docker environment check passed
 
 REM Check if external API is accessible
 echo 🔍 Checking external API accessibility...
-curl -f "http://192.168.100.35:9051/api/posts/?page=1&page_size=200" >nul 2>&1
+curl -f "http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F" >nul 2>&1
 if %errorlevel% equ 0 (
     echo ✅ External API is accessible
 ) else (
     echo ⚠️  Warning: External API not accessible. You may need to update the URL in docker.env
-    echo    Current URL: http://192.168.100.35:9051/api/posts/?page=1&page_size=200
+    echo    Current URL: http://192.168.100.35:9051/api/posts/?page=1&page_size=1000&platform=F
     set /p continue="   Do you want to continue anyway? (y/N): "
     if /i not "%continue%"=="y" (
         echo ❌ Setup cancelled. Please update docker.env with the correct API URL.
