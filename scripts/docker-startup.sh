@@ -35,6 +35,13 @@ init_database() {
     npx prisma db push
     
     echo "✅ Database initialized successfully"
+    
+    # Initialize token refresh system
+    echo "🔐 Initializing automatic token refresh system..."
+    npx tsx scripts/init-db.ts &
+    
+    # Wait a moment for token system to initialize
+    sleep 5
 }
 
 # Function to clear existing data
