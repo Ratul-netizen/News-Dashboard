@@ -105,3 +105,16 @@ model DataIngestionLog {
   
   @@map("data_ingestion_logs")
 }
+
+model TokenCache {
+  id                    String   @id @default(cuid())
+  service               String   @unique // e.g., 'external_api'
+  token                 String
+  expiresAt             DateTime
+  refreshToken          String?
+  tokenType             String   @default("Bearer")
+  createdAt             DateTime @default(now())
+  lastUsed              DateTime @default(now())
+  
+  @@map("token_cache")
+}

@@ -20,13 +20,14 @@ interface FilterBarProps {
     platforms: string[]
   }
   onRefresh: () => void
+  isRefreshing?: boolean
 }
 
-export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh }: FilterBarProps) {
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>(filters.dateRange)
+export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, isRefreshing = false }: FilterBarProps) {
+  // Use filters.dateRange directly instead of local state to avoid sync issues
+  const dateRange = filters.dateRange
 
   const handleDateRangeChange = (range: { from: Date; to: Date }) => {
-    setDateRange(range)
     onFiltersChange({ ...filters, dateRange: range })
   }
 
@@ -47,7 +48,6 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh }
       sources: [],
       platforms: [],
     }
-    setDateRange(clearedFilters.dateRange)
     onFiltersChange(clearedFilters)
   }
 
@@ -88,8 +88,10 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh }
                   defaultMonth={dateRange?.from}
                   selected={{ from: dateRange.from, to: dateRange.to }}
                   onSelect={(range) => {
-                    if (range?.from && range?.to) {
-                      handleDateRangeChange({ from: range.from, to: range.to })
+                    if (range?.from) {
+                      // Handle partial selection - if only from date is selected, use it as both from and to
+                      const toDate = range.to || range.from
+                      handleDateRangeChange({ from: range.from, to: toDate })
                     }
                   }}
                   numberOfMonths={2}
@@ -135,16 +137,33 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh }
               Clear Filters
             </Button>
 
-            <Button onClick={onRefresh} className="bg-blue-600 hover:bg-blue-700 text-white">
-              Refresh Now
+            <Button 
+              onClick={onRefresh} 
+              disabled={isRefreshing}
+              className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isRefreshing ? "Refreshing..." : "Refresh Now"}
             </Button>
           </div>
         </div>
 
         {/* Active Filters Display */}
-        {(filters.categories.length > 0 || filters.sources.length > 0 || filters.platforms.length > 0) && (
+        {(filters.categories.length > 0 || filters.sources.length > 0 || filters.platforms.length > 0 || 
+          (filters.dateRange.from && filters.dateRange.to && 
+           (dayjs(filters.dateRange.from).format('YYYY-MM-DD') !== dayjs().subtract(7, 'days').format('YYYY-MM-DD') ||
+            dayjs(filters.dateRange.to).format('YYYY-MM-DD') !== dayjs().format('YYYY-MM-DD')))) && (
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <span className="text-sm text-gray-400">Active filters:</span>
+            
+            {/* Date Range Badge */}
+            {filters.dateRange.from && filters.dateRange.to && 
+             (dayjs(filters.dateRange.from).format('YYYY-MM-DD') !== dayjs().subtract(7, 'days').format('YYYY-MM-DD') ||
+              dayjs(filters.dateRange.to).format('YYYY-MM-DD') !== dayjs().format('YYYY-MM-DD')) && (
+              <Badge variant="secondary" className="bg-orange-900 text-orange-100">
+                Date: {dayjs(filters.dateRange.from).format("MMM DD")} - {dayjs(filters.dateRange.to).format("MMM DD, YYYY")}
+              </Badge>
+            )}
+            
             {filters.categories.map((category) => (
               <Badge key={category} variant="secondary" className="bg-blue-900 text-blue-100">
                 Category: {category}

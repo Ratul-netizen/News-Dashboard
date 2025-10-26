@@ -1,14 +1,17 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { FilterBar } from "@/components/filter-bar"
 import { HighlightCards } from "@/components/highlight-cards"
 import { DynamicPostsTable } from "@/components/dynamic-posts-table"
 import { AnalyticsFieldsPanel } from "@/components/analytics-fields-panel"
 import { ChartsSection } from "@/components/charts-section"
+import { TokenMonitor } from "@/components/token-monitor"
 import type { DashboardFilters, TrendingPost } from "@/lib/types"
 import { ColumnConfig, ColumnConfigService } from "@/lib/services/column-config-service"
+import { useAuth } from "@/hooks/use-auth"
 import dayjs from "dayjs"
 
 interface DashboardData {
@@ -34,6 +37,8 @@ interface DashboardData {
 }
 
 export default function Dashboard() {
+  const router = useRouter()
+  const { isAuthenticated, isLoading: authLoading, getAuthHeaders, logout } = useAuth()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -53,63 +58,179 @@ export default function Dashboard() {
     platforms: [],
   })
 
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      // Only redirect if we're not already on the login page
+      if (window.location.pathname !== '/login') {
+        router.push('/login')
+      }
+    }
+  }, [isAuthenticated, authLoading, router])
+
   const filteredPosts = useMemo(() => {
-    if (!data?.trendingPosts || !searchQuery.trim()) {
-      return data?.trendingPosts || []
+    if (!data?.trendingPosts) {
+      return []
     }
 
-    const query = searchQuery.toLowerCase().trim()
-    return data.trendingPosts.filter((post) => {
-      return (
-        post.postText.toLowerCase().includes(query) ||
-        post.source.toLowerCase().includes(query) ||
-        post.category?.toLowerCase().includes(query) ||
-        post.platform.toLowerCase().includes(query)
+    let filtered = data.trendingPosts
+
+    // Apply search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      filtered = filtered.filter((post) => {
+        return (
+          post.postText.toLowerCase().includes(query) ||
+          post.source.toLowerCase().includes(query) ||
+          post.category?.toLowerCase().includes(query) ||
+          post.platform.toLowerCase().includes(query)
+        )
+      })
+    }
+
+    // Apply category filter
+    if (filters.categories.length > 0) {
+      filtered = filtered.filter((post) => 
+        post.category && filters.categories.includes(post.category)
       )
-    })
-  }, [data?.trendingPosts, searchQuery])
+    }
+
+    // Apply source filter
+    if (filters.sources.length > 0) {
+      filtered = filtered.filter((post) => 
+        filters.sources.includes(post.source)
+      )
+    }
+
+    // Apply platform filter
+    if (filters.platforms.length > 0) {
+      filtered = filtered.filter((post) => 
+        filters.platforms.includes(post.platform)
+      )
+    }
+
+    // Apply date range filter
+    if (filters.dateRange.from && filters.dateRange.to) {
+      filtered = filtered.filter((post) => {
+        const postDate = new Date(post.postDate)
+        // Set time to start of day for from date and end of day for to date
+        const fromDate = new Date(filters.dateRange.from)
+        fromDate.setHours(0, 0, 0, 0)
+        const toDate = new Date(filters.dateRange.to)
+        toDate.setHours(23, 59, 59, 999)
+        return postDate >= fromDate && postDate <= toDate
+      })
+    }
+
+    return filtered
+  }, [data?.trendingPosts, searchQuery, filters])
 
   const filteredAllPosts = useMemo(() => {
-    if (!data?.allPosts || !searchQuery.trim()) {
-      return data?.allPosts || []
+    if (!data?.allPosts) {
+      return []
     }
-    const query = searchQuery.toLowerCase().trim()
-    return data.allPosts.filter((post) => {
-      return (
-        post.postText.toLowerCase().includes(query) ||
-        post.source.toLowerCase().includes(query) ||
-        post.category?.toLowerCase().includes(query) ||
-        post.platform.toLowerCase().includes(query)
+
+    let filtered = data.allPosts
+
+    // Apply search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      filtered = filtered.filter((post) => {
+        return (
+          post.postText.toLowerCase().includes(query) ||
+          post.source.toLowerCase().includes(query) ||
+          post.category?.toLowerCase().includes(query) ||
+          post.platform.toLowerCase().includes(query)
+        )
+      })
+    }
+
+    // Apply category filter
+    if (filters.categories.length > 0) {
+      filtered = filtered.filter((post) => 
+        post.category && filters.categories.includes(post.category)
       )
-    })
-  }, [data?.allPosts, searchQuery])
+    }
+
+    // Apply source filter
+    if (filters.sources.length > 0) {
+      filtered = filtered.filter((post) => 
+        filters.sources.includes(post.source)
+      )
+    }
+
+    // Apply platform filter
+    if (filters.platforms.length > 0) {
+      filtered = filtered.filter((post) => 
+        filters.platforms.includes(post.platform)
+      )
+    }
+
+    // Apply date range filter
+    if (filters.dateRange.from && filters.dateRange.to) {
+      filtered = filtered.filter((post) => {
+        const postDate = new Date(post.postDate)
+        // Set time to start of day for from date and end of day for to date
+        const fromDate = new Date(filters.dateRange.from)
+        fromDate.setHours(0, 0, 0, 0)
+        const toDate = new Date(filters.dateRange.to)
+        toDate.setHours(23, 59, 59, 999)
+        return postDate >= fromDate && postDate <= toDate
+      })
+    }
+
+    return filtered
+  }, [data?.allPosts, searchQuery, filters])
 
   const filteredChartData = useMemo(() => {
-    if (!data?.chartData || !searchQuery.trim()) {
+    if (!data?.chartData) {
       return data?.chartData
     }
 
-    const query = searchQuery.toLowerCase().trim()
+    let filtered = { ...data.chartData }
 
-    return {
-      ...data.chartData,
-      newsFlow: data.chartData.newsFlow.filter((item) => item.category.toLowerCase().includes(query)),
-      sourceEngagement: data.chartData.sourceEngagement.filter((item) => item.source.toLowerCase().includes(query)),
-      categoryTrending: data.chartData.categoryTrending.filter((item) => item.category.toLowerCase().includes(query)),
-      categoryReactions: data.chartData.categoryReactions.filter((item) => item.category.toLowerCase().includes(query)),
-      sentimentDistribution: data.chartData.sentimentDistribution,
+    // Apply search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      filtered = {
+        ...filtered,
+        newsFlow: filtered.newsFlow.filter((item) => item.category.toLowerCase().includes(query)),
+        sourceEngagement: filtered.sourceEngagement.filter((item) => item.source.toLowerCase().includes(query)),
+        categoryTrending: filtered.categoryTrending.filter((item) => item.category.toLowerCase().includes(query)),
+        categoryReactions: filtered.categoryReactions.filter((item) => item.category.toLowerCase().includes(query)),
+        sentimentDistribution: filtered.sentimentDistribution,
+      }
     }
-  }, [data?.chartData, searchQuery])
+
+    // Apply category filter
+    if (filters.categories.length > 0) {
+      filtered = {
+        ...filtered,
+        newsFlow: filtered.newsFlow.filter((item) => filters.categories.includes(item.category)),
+        categoryTrending: filtered.categoryTrending.filter((item) => filters.categories.includes(item.category)),
+        categoryReactions: filtered.categoryReactions.filter((item) => filters.categories.includes(item.category)),
+      }
+    }
+
+    // Apply source filter
+    if (filters.sources.length > 0) {
+      filtered = {
+        ...filtered,
+        sourceEngagement: filtered.sourceEngagement.filter((item) => filters.sources.includes(item.source)),
+      }
+    }
+
+    return filtered
+  }, [data?.chartData, searchQuery, filters])
 
   const filteredHighlightMetrics = useMemo(() => {
-    if (!data?.highlightMetrics || !searchQuery.trim()) {
+    if (!data?.highlightMetrics) {
       return data?.highlightMetrics
     }
 
-    const query = searchQuery.toLowerCase().trim()
     const defaultMetric = { value: 0, text: "No matching data", source: "N/A", postLink: null as string | null, fullText: "", sentiment: "neutral" }
 
-    // Find matching posts for highlight metrics
+    // Use filtered posts for highlight metrics
     const matchingPosts = filteredPosts
 
     if (matchingPosts.length === 0) {
@@ -151,7 +272,7 @@ export default function Dashboard() {
         sentiment: mostCommented.sentiment,
       },
     }
-  }, [data?.highlightMetrics, filteredPosts, searchQuery])
+  }, [data?.highlightMetrics, filteredPosts])
 
   const handleAddColumn = (columnId: string) => {
     const columnToAdd = ColumnConfigService.getColumnById(columnId)
@@ -211,6 +332,7 @@ export default function Dashboard() {
       const response = await fetch(`/api/dashboard?${params}`, {
         cache: 'no-store',
         headers: {
+          ...getAuthHeaders(),
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
         }
@@ -233,7 +355,10 @@ export default function Dashboard() {
       console.log('🔄 Starting manual data refresh...')
       
       // Trigger data ingestion
-      const ingestResponse = await fetch("/api/ingest", { method: "POST" })
+      const ingestResponse = await fetch("/api/ingest", { 
+        method: "POST",
+        headers: getAuthHeaders()
+      })
       if (!ingestResponse.ok) {
         throw new Error(`Ingest failed: ${ingestResponse.statusText}`)
       }
@@ -272,6 +397,16 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#1E1E1E] flex items-center justify-center">
+        <div className="text-white text-lg">Checking authentication...</div>
+      </div>
+    )
+  }
+
+  // Show loading while fetching data
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-[#1E1E1E] flex items-center justify-center">
@@ -282,14 +417,32 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#1E1E1E] text-white">
-      <DashboardHeader onManualRefresh={handleManualRefresh} onSearch={handleSearch} searchQuery={searchQuery} />
+      <DashboardHeader 
+        onManualRefresh={handleManualRefresh} 
+        onSearch={handleSearch} 
+        searchQuery={searchQuery}
+        onLogout={logout}
+      />
 
       <FilterBar
         filters={filters}
         onFiltersChange={setFilters}
         filterOptions={data?.filterOptions || { categories: [], sources: [], platforms: [] }}
-        onRefresh={fetchDashboardData}
+        onRefresh={handleManualRefresh}
+        isRefreshing={isIngesting}
       />
+
+      {/* Token Monitor - Collapsible */}
+      <div className="max-w-[1800px] mx-auto px-10">
+        <details className="group">
+          <summary className="cursor-pointer text-sm text-gray-400 hover:text-white transition-colors">
+            🔐 Token Status (Click to expand)
+          </summary>
+          <div className="mt-4">
+            <TokenMonitor />
+          </div>
+        </details>
+      </div>
 
       <main className="max-w-[1800px] mx-auto px-10 py-8 space-y-10">
         {data && (

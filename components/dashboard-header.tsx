@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Search, RefreshCw, BarChart3, X } from "lucide-react"
+import { Search, RefreshCw, BarChart3, X, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -11,9 +11,10 @@ interface DashboardHeaderProps {
   onManualRefresh: () => void
   onSearch: (query: string) => void
   searchQuery: string
+  onLogout?: () => void
 }
 
-export function DashboardHeader({ onManualRefresh, onSearch, searchQuery }: DashboardHeaderProps) {
+export function DashboardHeader({ onManualRefresh, onSearch, searchQuery, onLogout }: DashboardHeaderProps) {
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -71,6 +72,18 @@ export function DashboardHeader({ onManualRefresh, onSearch, searchQuery }: Dash
               <RefreshCw className="h-4 w-4 mr-2" />
               Manual Refresh
             </Button>
+
+            {onLogout && (
+              <Button
+                onClick={onLogout}
+                variant="outline"
+                size="sm"
+                className="border-red-700 text-red-300 hover:bg-red-800 hover:text-white bg-transparent"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            )}
           </div>
         </div>
       </div>

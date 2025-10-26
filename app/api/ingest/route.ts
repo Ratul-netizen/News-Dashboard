@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import axios from "axios"
 import { prisma } from "../../../lib/db"
 import { calculateJaccardSimilarity, generateBaseKey } from "../../../lib/utils/text-similarity"
+import { getTokenService } from "../../../lib/services/token-refresh-service"
 
 // Clear all data endpoint
 export async function DELETE(request: NextRequest) {
@@ -38,6 +39,12 @@ const API_PASSWORD = process.env.EXTERNAL_API_PASSWORD
 const STATIC_API_TOKEN = process.env.EXTERNAL_API_TOKEN
 const AUTH_SCHEME_OVERRIDE = process.env.EXTERNAL_AUTH_SCHEME // e.g. "Token" or "Bearer"
 
+// Token cache for automatic authentication
+let cachedToken: string | null = null
+let tokenExpiry: number | null = null
+let lastAuthAttempt: number = 0
+const AUTH_RETRY_DELAY = 30000 // 30 seconds between auth attempts
+
 // Build a paged URL from a base that may already contain query params
 function buildPagedUrl(baseUrl: string, page: number, pageSize: number): string {
   try {
@@ -51,60 +58,288 @@ function buildPagedUrl(baseUrl: string, page: number, pageSize: number): string 
   }
 }
 
-// Resolve auth headers for external API.
-// Supports either a static token via env or a login flow returning a token.
+// Check if token is expired or about to expire
+function isTokenExpired(): boolean {
+  if (!cachedToken || !tokenExpiry) return true
+  const now = Date.now()
+  // Refresh token if it expires in the next 5 minutes
+  return now >= (tokenExpiry - 5 * 60 * 1000)
+}
+
+// Parse JWT token to get expiry time
+function parseTokenExpiry(token: string): number | null {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
+    return payload.exp ? payload.exp * 1000 : null // Convert to milliseconds
+  } catch {
+    return null
+  }
+}
+
+// Enhanced JWT authentication with multiple strategies
+async function performAuthentication(): Promise<string | null> {
+  const now = Date.now()
+  
+  // Rate limiting: don't attempt auth more than once every 30 seconds
+  if (now - lastAuthAttempt < AUTH_RETRY_DELAY) {
+    console.log("[v0] Auth rate limited, using cached token or waiting...")
+    return cachedToken
+  }
+  
+  lastAuthAttempt = now
+  
+  if (!API_EMAIL || !API_PASSWORD) {
+    console.warn("[v0] Authentication credentials not configured")
+    return null
+  }
+
+  try {
+    console.log("[v0] Attempting JWT authentication...")
+    
+    // Strategy 1: Try the configured auth URL
+    if (AUTH_URL) {
+      const token = await tryAuthenticationEndpoint(AUTH_URL)
+      if (token) return token
+    }
+    
+    // Strategy 2: Try common authentication patterns
+    const baseUrl = AUTH_URL ? AUTH_URL.split('/api')[0] : 'http://192.168.100.35:9055'
+    const authEndpoints = [
+      `${baseUrl}/api/login`,
+      `${baseUrl}/api/auth/login`,
+      `${baseUrl}/api/token`,
+      `${baseUrl}/api/authenticate`,
+      `${baseUrl}/api/auth/token`,
+      `${baseUrl}/api/auth/authenticate`,
+      `${baseUrl}/audit/user/login`,
+      `${baseUrl}/audit/user/authenticate`,
+      `${baseUrl}/auth/login`,
+      `${baseUrl}/auth/token`,
+    ]
+    
+    for (const endpoint of authEndpoints) {
+      const token = await tryAuthenticationEndpoint(endpoint)
+      if (token) return token
+    }
+    
+    // Strategy 3: Try different request formats
+    const alternativeEndpoints = [
+      'http://192.168.100.35:9055/api/login',
+      'http://192.168.100.35:9055/api/auth/login',
+      'http://192.168.100.35:9055/api/token',
+    ]
+    
+    for (const endpoint of alternativeEndpoints) {
+      const token = await tryAlternativeAuth(endpoint)
+      if (token) return token
+    }
+    
+    console.warn("[v0] All authentication strategies failed")
+    return null
+    
+  } catch (error) {
+    console.error("[v0] Authentication error:", error instanceof Error ? error.message : error)
+    return null
+  }
+}
+
+function extractToken(data: any, headers?: any): string | null {
+  try {
+    // Common top-level fields
+    const direct = data?.access || data?.token || data?.auth_token || data?.key || data?.access_token || data?.jwt
+    if (direct) return String(direct)
+    // Common nested token containers
+    if (data?.token?.access_token) return String(data.token.access_token)
+    if (data?.data?.token?.access_token) return String(data.data.token.access_token)
+    if (data?.token?.access) return String(data.token.access)
+    if (data?.data?.token?.access) return String(data.data.token.access)
+    // Nested under data or result
+    const nested = data?.data?.access || data?.data?.token || data?.result?.access || data?.result?.token
+    if (nested && typeof nested === 'string') return String(nested)
+    // Sometimes token is returned in Authorization header
+    const authHeader = headers?.authorization || headers?.Authorization
+    if (authHeader && String(authHeader).toLowerCase().startsWith('bearer ')) {
+      return String(authHeader).slice(7).trim()
+    }
+  } catch {}
+  return null
+}
+
+// Try authentication with standard format
+async function tryAuthenticationEndpoint(endpoint: string): Promise<string | null> {
+  try {
+    console.log(`[v0] Trying authentication endpoint: ${endpoint}`)
+    
+    const response = await axios.post(endpoint, {
+      email: API_EMAIL,
+      username: API_EMAIL,
+      password: API_PASSWORD,
+    }, { 
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
+
+    const data = response.data || {}
+    const token = extractToken(data, response.headers)
+    
+    if (token) {
+      console.log(`[v0] ✅ Authentication successful with endpoint: ${endpoint}`)
+      cachedToken = token
+      tokenExpiry = parseTokenExpiry(token)
+      return token
+    }
+    
+    console.log(`[v0] ❌ Endpoint ${endpoint} returned no token. Response keys:`, Object.keys(data))
+    return null
+    
+  } catch (error: any) {
+    console.log(`[v0] ❌ Endpoint ${endpoint} failed:`, error.response?.status || error.message)
+    return null
+  }
+}
+
+// Try alternative authentication formats
+async function tryAlternativeAuth(endpoint: string): Promise<string | null> {
+  const authFormats = [
+    // Standard format
+    { email: API_EMAIL, username: API_EMAIL, password: API_PASSWORD },
+    // Alternative format 1
+    { username: API_EMAIL, password: API_PASSWORD },
+    // Alternative format 2
+    { user: API_EMAIL, pass: API_PASSWORD },
+    // Alternative format 3
+    { login: API_EMAIL, password: API_PASSWORD },
+  ]
+  
+  for (const authData of authFormats) {
+    try {
+      console.log(`[v0] Trying alternative auth format on ${endpoint}`)
+      
+      const response = await axios.post(endpoint, authData, { 
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      })
+
+      const data = response.data || {}
+      const token = extractToken(data, response.headers)
+      
+      if (token) {
+        console.log(`[v0] ✅ Alternative auth successful with endpoint: ${endpoint}`)
+        cachedToken = token
+        tokenExpiry = parseTokenExpiry(token)
+        return token
+      }
+    } catch (error: any) {
+      console.log(`[v0] ❌ Alternative auth failed for ${endpoint}:`, error.response?.status || error.message)
+      continue
+    }
+  }
+  
+  // Final fallback: form-encoded credentials (common in some auth servers)
+  try {
+    console.log(`[v0] Trying form-encoded auth on ${endpoint}`)
+    const form = new URLSearchParams()
+    form.append('username', String(API_EMAIL))
+    form.append('password', String(API_PASSWORD))
+    const response = await axios.post(endpoint, form.toString(), {
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      }
+    })
+    const data = response.data || {}
+    const token = extractToken(data, response.headers)
+    if (token) {
+      console.log(`[v0] ✅ Form-encoded auth successful with endpoint: ${endpoint}`)
+      cachedToken = token
+      tokenExpiry = parseTokenExpiry(token)
+      return token
+    }
+  } catch (err: any) {
+    console.log(`[v0] ❌ Form-encoded auth failed for ${endpoint}:`, err.response?.status || err.message)
+  }
+  
+  return null
+}
+
+// Resolve auth headers for external API with automatic token management
 async function getExternalApiAuthHeaders(): Promise<Record<string, string>> {
-  // If user set a static token, prefer it.
+  // Try to use the new token service first
+  const tokenService = getTokenService()
+  if (tokenService) {
+    try {
+      console.log("[v0] Using automatic token service for authentication")
+      return await tokenService.getAuthHeaders()
+    } catch (error) {
+      console.warn("[v0] Token service failed, falling back to legacy auth:", error)
+    }
+  }
+
+  // Fallback to legacy authentication system
+  // If user set a static token, ALWAYS use it first
   if (STATIC_API_TOKEN && STATIC_API_TOKEN.trim().length > 0) {
+    console.log("[v0] Using static API token for authentication")
     return { Authorization: `Bearer ${STATIC_API_TOKEN}` }
   }
 
-  // Otherwise, try logging in if creds and auth URL are provided
-  if (AUTH_URL && API_EMAIL && API_PASSWORD) {
-    try {
-      const resp = await axios.post(AUTH_URL, {
-        email: API_EMAIL,
-        username: API_EMAIL,
-        password: API_PASSWORD,
-      }, { timeout: 30000 })
-
-      const data = resp.data || {}
-      const token = data.access || data.token || data.auth_token || data.key
-      if (!token) {
-        console.warn("[v0] Auth response did not include a token. Response keys:", Object.keys(data))
-        return {}
-      }
-
-      // Try env override first, then response token_type, else Bearer
-      const scheme = AUTH_SCHEME_OVERRIDE || data.token_type || "Bearer"
-      return { Authorization: `${scheme} ${token}` }
-    } catch (e) {
-      console.warn("[v0] External API authentication failed:", e instanceof Error ? e.message : e)
-      return {}
-    }
+  // Check if we have a valid cached token
+  if (cachedToken && !isTokenExpired()) {
+    console.log("[v0] Using cached authentication token")
+    return { Authorization: `Bearer ${cachedToken}` }
   }
 
+  // Need to authenticate
+  console.log("[v0] No valid cached token, performing authentication...")
+  const token = await performAuthentication()
+  
+  if (token) {
+    console.log("[v0] ✅ Authentication successful, using new token")
+    return { Authorization: `Bearer ${token}` }
+  }
+
+  console.warn("[v0] ❌ Authentication failed, proceeding without auth")
   return {}
 }
 
-// Always attempt login and return headers, ignoring static token.
+// Force login - always attempt fresh authentication
 async function getExternalApiAuthHeadersForceLogin(): Promise<Record<string, string>> {
-  if (AUTH_URL && API_EMAIL && API_PASSWORD) {
+  // Try to use the new token service first
+  const tokenService = getTokenService()
+  if (tokenService) {
     try {
-      const resp = await axios.post(AUTH_URL, {
-        email: API_EMAIL,
-        username: API_EMAIL,
-        password: API_PASSWORD,
-      }, { timeout: 30000 })
-      const data = resp.data || {}
-      const token = data.access || data.token || data.auth_token || data.key
-      if (!token) return {}
-      const scheme = AUTH_SCHEME_OVERRIDE || data.token_type || "Bearer"
-      return { Authorization: `${scheme} ${token}` }
-    } catch {
-      return {}
+      console.log("[v0] Force login: Using automatic token service")
+      return await tokenService.getAuthHeaders()
+    } catch (error) {
+      console.warn("[v0] Token service force login failed, falling back to legacy auth:", error)
     }
   }
+
+  // Fallback to legacy authentication system
+  // If static token is available, use it even in force login mode
+  if (STATIC_API_TOKEN && STATIC_API_TOKEN.trim().length > 0) {
+    console.log("[v0] Force login: Using static API token")
+    return { Authorization: `Bearer ${STATIC_API_TOKEN}` }
+  }
+
+  console.log("[v0] Force login: Performing fresh authentication...")
+  // Clear cached token to force fresh authentication
+  cachedToken = null
+  tokenExpiry = null
+  
+  const token = await performAuthentication()
+  if (token) {
+    console.log("[v0] ✅ Force login successful")
+    return { Authorization: `Bearer ${token}` }
+  }
+  
+  console.warn("[v0] ❌ Force login failed")
   return {}
 }
 
@@ -112,13 +347,33 @@ async function getExternalApiAuthHeadersForceLogin(): Promise<Record<string, str
 async function getWithAuth(url: string, timeoutMs: number) {
   const headers = await getExternalApiAuthHeaders()
   try {
-    return await axios.get(url, { timeout: timeoutMs, headers })
+    console.log(`[v0] Making authenticated request to: ${url}`)
+    const response = await axios.get(url, { timeout: timeoutMs, headers })
+    console.log(`[v0] ✅ Request successful: ${response.status}`)
+    return response
   } catch (err: any) {
     const status = err?.response?.status
+    console.log(`[v0] Request failed with status: ${status}`)
+    
     if (status === 401) {
+      console.log(`[v0] 401 Unauthorized, attempting fresh authentication...`)
       const retryHeaders = await getExternalApiAuthHeadersForceLogin()
-      return await axios.get(url, { timeout: timeoutMs, headers: retryHeaders })
+      if (Object.keys(retryHeaders).length > 0) {
+        console.log(`[v0] Retrying with fresh authentication...`)
+        return await axios.get(url, { timeout: timeoutMs, headers: retryHeaders })
+      }
     }
+    
+    // If authentication fails, try without auth headers (some APIs might work without auth)
+    if (status === 401 || status === 403) {
+      console.log(`[v0] Trying request without authentication...`)
+      try {
+        return await axios.get(url, { timeout: timeoutMs })
+      } catch (fallbackErr: any) {
+        console.log(`[v0] Fallback request also failed: ${fallbackErr.response?.status}`)
+      }
+    }
+    
     throw err
   }
 }

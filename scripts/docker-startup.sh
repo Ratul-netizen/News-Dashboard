@@ -9,7 +9,8 @@ wait_for_app() {
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
-        if curl -f http://localhost:3000 > /dev/null 2>&1; then
+        # Check if the app is responding (even with 401 auth error, it means the app is running)
+        if curl -f http://localhost:3000 > /dev/null 2>&1 || curl -s http://localhost:3000 | grep -q "Authentication required"; then
             echo "✅ Application is ready!"
             return 0
         fi
@@ -39,7 +40,13 @@ init_database() {
 # Function to clear existing data
 clear_data() {
     echo "🧹 Clearing existing data..."
-    curl -X DELETE http://localhost:3000/api/ingest || echo "No data to clear or clear failed"
+    # Get credentials from environment
+    local username="${BASIC_AUTH_USERNAME:-admin}"
+    local password="${BASIC_AUTH_PASSWORD:-admin123}"
+    local auth_string=$(echo -n "$username:$password" | base64)
+    
+    curl -X DELETE http://localhost:3000/api/ingest \
+         -H "Authorization: Basic $auth_string" || echo "No data to clear or clear failed"
     sleep 3
 }
 
@@ -49,10 +56,16 @@ fetch_initial_data() {
     local max_attempts=5
     local attempt=1
     
+    # Get credentials from environment
+    local username="${BASIC_AUTH_USERNAME:-admin}"
+    local password="${BASIC_AUTH_PASSWORD:-admin123}"
+    local auth_string=$(echo -n "$username:$password" | base64)
+    
     while [ $attempt -le $max_attempts ]; do
         echo "🔄 Attempt $attempt/$max_attempts to fetch data..."
         
-        if curl -X POST http://localhost:3000/api/ingest; then
+        if curl -X POST http://localhost:3000/api/ingest \
+                -H "Authorization: Basic $auth_string"; then
             echo "✅ Initial data fetched successfully!"
             return 0
         fi
@@ -70,20 +83,25 @@ fetch_initial_data() {
 setup_cron() {
     echo "⏰ Setting up cron jobs..."
     
+    # Get credentials for cron jobs
+    local username="${BASIC_AUTH_USERNAME:-admin}"
+    local password="${BASIC_AUTH_PASSWORD:-admin123}"
+    local auth_string=$(echo -n "$username:$password" | base64)
+    
     # Create cron job file
     cat > /tmp/crontab << EOF
-# Data ingestion every 10 minutes
-*/10 * * * * curl -X POST http://localhost:3000/api/ingest >> /var/log/cron.log 2>&1
+# Data ingestion every hour at minute 0
+0 * * * * curl -X POST http://localhost:3000/api/ingest -H "Authorization: Basic $auth_string" >> /var/log/cron.log 2>&1
 
-# Health check every 5 minutes
-*/5 * * * * curl -f http://localhost:3000 >> /var/log/cron.log 2>&1 || echo "Health check failed at \$(date)" >> /var/log/cron.log
+# Health check every 10 minutes
+*/10 * * * * curl -f http://localhost:3000 -H "Authorization: Basic $auth_string" >> /var/log/cron.log 2>&1 || echo "Health check failed at \$(date)" >> /var/log/cron.log
 EOF
     
     # Install cron job
     crontab /tmp/crontab
     
-    # Start cron daemon (use -b to run in background; some builds lack -l)
-    crond -b
+    # Start cron daemon (BusyBox variants may not support -b; run in foreground with &)
+    crond -f &
     
     echo "✅ Cron jobs configured and started"
 }
@@ -93,7 +111,7 @@ monitor_cron() {
     while true; do
         if ! pgrep crond > /dev/null; then
             echo "⚠️ Cron daemon stopped, restarting..."
-            crond -b
+            crond -f &
         fi
         sleep 60
     done
@@ -123,7 +141,7 @@ main() {
     
     echo "🎉 Startup completed successfully!"
     echo "🌐 Access your dashboard at: http://localhost:3000"
-    echo "⏰ Data will auto-refresh every 10 minutes"
+    echo "⏰ Data ingestion scheduled hourly via cron"
     
     # Start Prisma Studio
     echo "🔧 Starting Prisma Studio..."
