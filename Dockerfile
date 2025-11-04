@@ -1,5 +1,5 @@
-# Use Node.js 18 Alpine from Google's mirror to avoid Docker Hub outages
-FROM mirror.gcr.io/library/node:18-alpine
+# Use official Node.js 18 Alpine image (Docker Hub)
+FROM node:18-alpine
 
 # Install necessary packages
 RUN apk add --no-cache \

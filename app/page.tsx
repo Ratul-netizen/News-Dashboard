@@ -8,10 +8,9 @@ import { HighlightCards } from "@/components/highlight-cards"
 import { DynamicPostsTable } from "@/components/dynamic-posts-table"
 import { AnalyticsFieldsPanel } from "@/components/analytics-fields-panel"
 import { ChartsSection } from "@/components/charts-section"
-import { TokenMonitor } from "@/components/token-monitor"
 import type { DashboardFilters, TrendingPost } from "@/lib/types"
 import { ColumnConfig, ColumnConfigService } from "@/lib/services/column-config-service"
-import { useAuth } from "@/hooks/use-auth"
+// Auth removed
 import dayjs from "dayjs"
 
 interface DashboardData {
@@ -38,7 +37,6 @@ interface DashboardData {
 
 export default function Dashboard() {
   const router = useRouter()
-  const { isAuthenticated, isLoading: authLoading, getAuthHeaders, logout } = useAuth()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -58,15 +56,7 @@ export default function Dashboard() {
     platforms: [],
   })
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      // Only redirect if we're not already on the login page
-      if (window.location.pathname !== '/login') {
-        router.push('/login')
-      }
-    }
-  }, [isAuthenticated, authLoading, router])
+  // Auth disabled: no redirect
 
   const filteredPosts = useMemo(() => {
     if (!data?.trendingPosts) {
@@ -332,7 +322,6 @@ export default function Dashboard() {
       const response = await fetch(`/api/dashboard?${params}`, {
         cache: 'no-store',
         headers: {
-          ...getAuthHeaders(),
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
         }
@@ -356,8 +345,7 @@ export default function Dashboard() {
       
       // Trigger data ingestion
       const ingestResponse = await fetch("/api/ingest", { 
-        method: "POST",
-        headers: getAuthHeaders()
+        method: "POST"
       })
       if (!ingestResponse.ok) {
         throw new Error(`Ingest failed: ${ingestResponse.statusText}`)
@@ -397,14 +385,7 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
-  // Show loading while checking authentication
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-[#1E1E1E] flex items-center justify-center">
-        <div className="text-white text-lg">Checking authentication...</div>
-      </div>
-    )
-  }
+  // Auth disabled: no auth loading state
 
   // Show loading while fetching data
   if (loading && !data) {
@@ -421,7 +402,6 @@ export default function Dashboard() {
         onManualRefresh={handleManualRefresh} 
         onSearch={handleSearch} 
         searchQuery={searchQuery}
-        onLogout={logout}
       />
 
       <FilterBar
@@ -432,17 +412,7 @@ export default function Dashboard() {
         isRefreshing={isIngesting}
       />
 
-      {/* Token Monitor - Collapsible */}
-      <div className="max-w-[1800px] mx-auto px-10">
-        <details className="group">
-          <summary className="cursor-pointer text-sm text-gray-400 hover:text-white transition-colors">
-            🔐 Token Status (Click to expand)
-          </summary>
-          <div className="mt-4">
-            <TokenMonitor />
-          </div>
-        </details>
-      </div>
+      {/* Token status panel removed for end-users */}
 
       <main className="max-w-[1800px] mx-auto px-10 py-8 space-y-10">
         {data && (
@@ -470,7 +440,7 @@ export default function Dashboard() {
               onRemoveColumn={handleRemoveColumn}
               onReorderColumns={handleReorderColumns}
               showColumnManagement={false}
-              postsPerPage={15}
+              postsPerPage={filteredAllPosts.length || 1000}
             />
             
             <ChartsSection chartData={filteredChartData || data.chartData} />

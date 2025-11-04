@@ -36,7 +36,9 @@ export async function GET(request: NextRequest) {
 
     // Build where clause for filtering
     // Include any news item whose time window overlaps the selected range
-    // i.e., firstPostDate <= to AND lastPostDate >= from
+    // Handle cases where lastPostDate may be null by falling back to firstPostDate
+    // Overlapping window: firstPostDate <= to AND lastPostDate >= from
+    // Note: lastPostDate is non-nullable in schema, so no null checks
     const whereClause: any = {
       firstPostDate: { lte: filters.dateRange.to },
       lastPostDate: { gte: filters.dateRange.from },
