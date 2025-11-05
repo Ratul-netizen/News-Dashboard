@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   ExternalLink,
   Hash,
@@ -18,11 +19,64 @@ import {
   MessageCircle,
   Calendar,
   BarChart3,
+  Copy,
+  Check,
 } from 'lucide-react'
 import type { TrendingPost } from '@/lib/types'
 import dayjs from 'dayjs'
-import { RelatedPostsPanel } from './related-posts-panel'
 import { useState, useEffect } from 'react'
+
+interface NewsItemDetails {
+  newsItem: {
+    id: string
+    groupKey: string
+    category: string | null
+    primarySource: string
+    primaryPlatform: string
+    totalReactions: number
+    totalShares: number
+    totalComments: number
+    sourceCount: number
+    platformCount: number
+    postCount: number
+    avgTrendingScore: number
+    firstPostDate: Date
+    lastPostDate: Date
+    postAnalysis: {
+      sources: string[]
+      platforms: string[]
+      sampleTexts?: string[]
+      postLinks?: string[]
+      totalEngagement?: number
+      sentimentBreakdown?: {
+        positive: number
+        neutral: number
+        negative: number
+      }
+    } | null
+  }
+  posts: Array<{
+    id: string
+    postId: string
+    postText: string
+    postDate: Date
+    postLink: string | null
+    platform: string
+    source: string
+    reactions: number
+    shares: number
+    comments: number
+    sentiment: string | null
+    featuredImagesPath: string | null
+  }>
+  dailyEngagement?: Array<{
+    date: string
+    reactions: number
+    shares: number
+    comments: number
+    posts: number
+  }>
+}
 
 interface SimplePostAnalysisModalProps {
   isOpen: boolean
@@ -31,30 +85,33 @@ interface SimplePostAnalysisModalProps {
 }
 
 export function SimplePostAnalysisModal({ isOpen, onClose, post }: SimplePostAnalysisModalProps) {
-  const [relatedPosts, setRelatedPosts] = useState<TrendingPost[]>([])
-  const [loadingRelated, setLoadingRelated] = useState(false)
+  const [newsItemData, setNewsItemData] = useState<NewsItemDetails | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  // Fetch related posts when modal opens
+  // Fetch NewsItem details with all related posts when modal opens
   useEffect(() => {
     if (isOpen && post) {
-      fetchRelatedPosts()
+      fetchNewsItemDetails()
     }
   }, [isOpen, post])
 
-  const fetchRelatedPosts = async () => {
+  const fetchNewsItemDetails = async () => {
     if (!post) return
     
     try {
-      setLoadingRelated(true)
-      const response = await fetch(`/api/posts/related/${post.id}`)
+      setLoading(true)
+      // post.id is actually the NewsItem ID from the dashboard API
+      const response = await fetch(`/api/news-item/${post.id}`)
       if (response.ok) {
         const data = await response.json()
-        setRelatedPosts(data.data.relatedPosts || [])
+        setNewsItemData(data)
+      } else {
+        console.error('Failed to fetch news item details')
       }
     } catch (error) {
-      console.error('Error fetching related posts:', error)
+      console.error('Error fetching news item details:', error)
     } finally {
-      setLoadingRelated(false)
+      setLoading(false)
     }
   }
 
@@ -96,9 +153,57 @@ export function SimplePostAnalysisModal({ isOpen, onClose, post }: SimplePostAna
     }
   }
 
+  // Helper subcomponents
+  function ExpandableText({ text, maxChars = 450 }: { text: string; maxChars?: number }) {
+    const [expanded, setExpanded] = useState(false)
+    const isLong = text.length > maxChars
+    const displayText = expanded || !isLong ? text : text.substring(0, maxChars) + '...'
+    return (
+      <div className="space-y-2">
+        <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">{displayText}</p>
+        {isLong && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-gray-300 hover:text-white hover:bg-gray-700"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? 'Show less' : 'Show more'}
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  function CopyPostButton({ text }: { text: string }) {
+    const [copied, setCopied] = useState(false)
+    const handleCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      } catch (e) {
+        // noop
+      }
+    }
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleCopy}
+        className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+      >
+        {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+        {copied ? 'Copied' : 'Copy'}
+      </Button>
+    )
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] bg-gray-900 border-gray-800 text-white">
+      <DialogContent className="max-w-7xl max-h-[90vh] bg-gray-900 border-gray-800 text-white">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Post Analysis</DialogTitle>
           <DialogDescription className="text-gray-400">
@@ -107,210 +212,281 @@ export function SimplePostAnalysisModal({ isOpen, onClose, post }: SimplePostAna
         </DialogHeader>
 
         <ScrollArea className="max-h-[calc(90vh-120px)]">
-          <div className="space-y-6">
-            {/* Header Badges */}
-            <div className="flex flex-wrap gap-3">
-              {post.category && (
-                <Badge className={`${getCategoryColor(post.category)}`}>
-                  <Hash className="w-3 h-3 mr-1" />
-                  {post.category}
-                </Badge>
-              )}
-              <Badge className="bg-green-900 text-green-100">
-                <Users className="w-3 h-3 mr-1" />
-                {post.sourceCount} Sources
-              </Badge>
-              <Badge className="bg-purple-900 text-purple-100">
-                <Globe className="w-3 h-3 mr-1" />
-                {post.platform}
-              </Badge>
-              <Badge className="bg-yellow-900 text-yellow-100">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                Score: {post.trendingScore.toFixed(1)}
-              </Badge>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-400">Loading analysis...</div>
             </div>
-
-            {/* Post Content */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-lg text-white">Post Content</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <Calendar className="w-4 h-4" />
-                    {dayjs(post.postDate).format('MMM DD, YYYY [at] HH:mm')}
-                  </div>
-                  <p className="text-gray-300 leading-relaxed">{post.postText}</p>
-                  {post.postLink && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
-                    >
-                      <a href={post.postLink} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        View Original Post
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Engagement Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-400">Reactions</p>
-                      <p className="text-2xl font-bold text-red-400">
-                        {formatNumber(post.reactions)}
-                      </p>
-                    </div>
-                    <Heart className="h-8 w-8 text-red-400" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-400">Shares</p>
-                      <p className="text-2xl font-bold text-green-400">
-                        {formatNumber(post.shares)}
-                      </p>
-                    </div>
-                    <Share2 className="h-8 w-8 text-green-400" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-400">Comments</p>
-                      <p className="text-2xl font-bold text-blue-400">
-                        {formatNumber(post.comments)}
-                      </p>
-                    </div>
-                    <MessageCircle className="h-8 w-8 text-blue-400" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Advanced Scoring Metrics */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-lg text-white flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  Advanced Scoring Metrics
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <p className="text-sm text-gray-400">Virality Score</p>
-                    <p className="text-xl font-bold text-yellow-400">{post.viralityScore}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-gray-400">Source Weight</p>
-                    <p className="text-xl font-bold text-blue-400">{post.sourceWeight.toFixed(1)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-gray-400">News Flow Weight</p>
-                    <p className="text-xl font-bold text-green-400">{post.newsFlowWeight.toFixed(1)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-gray-400">Final Score</p>
-                    <p className="text-xl font-bold text-purple-400">{post.finalTrendingScore.toFixed(1)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Sentiment Analysis */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-lg text-white">Sentiment Analysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  <Badge className={`text-lg px-4 py-2 ${getSentimentColor(post.sentiment)}`}>
-                    {post.sentiment.charAt(0).toUpperCase() + post.sentiment.slice(1)}
+          ) : newsItemData ? (
+            <div className="space-y-6">
+              {/* Header Badges - Show from NewsItem data */}
+              <div className="flex flex-wrap gap-3">
+                {newsItemData.newsItem.category && (
+                  <Badge className={`${getCategoryColor(newsItemData.newsItem.category)}`}>
+                    <Hash className="w-3 h-3 mr-1" />
+                    {newsItemData.newsItem.category}
                   </Badge>
-                  <div className="text-gray-400">
-                    <p className="text-sm">Based on content analysis and engagement patterns</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                )}
+                <Badge className="bg-green-900 text-green-100">
+                  <Users className="w-3 h-3 mr-1" />
+                  {newsItemData.newsItem.sourceCount} Sources
+                </Badge>
+                <Badge className="bg-purple-900 text-purple-100">
+                  <Globe className="w-3 h-3 mr-1" />
+                  {newsItemData.newsItem.platformCount} Platforms
+                </Badge>
+                <Badge className="bg-yellow-900 text-yellow-100">
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  {newsItemData.newsItem.postCount} Posts
+                </Badge>
+              </div>
 
-            {/* Post Analysis Data (if available) */}
-            {post.postAnalysis && (
-              <>
-                <Separator className="bg-gray-700" />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card className="bg-gray-800 border-gray-700">
-                    <CardHeader>
-                      <CardTitle className="text-lg text-white">Related Sources ({post.postAnalysis.sources.length})</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {post.postAnalysis.sources.map((source, index) => (
-                          <Badge key={index} variant="outline" className="border-gray-600 text-gray-300 mr-2 mb-2">
+              {/* Selected Post Content */}
+              <Card className="bg-gray-800 border-gray-700">
+                <CardHeader className="flex flex-row items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg text-white">Post Content</CardTitle>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <Calendar className="w-4 h-4" />
+                      {dayjs(post.postDate).format('MMM DD, YYYY [at] HH:mm')}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {post.postLink && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                      >
+                        <a href={post.postLink} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Open
+                        </a>
+                      </Button>
+                    )}
+                    <CopyPostButton text={post.postText} />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ExpandableText text={post.postText} maxChars={450} />
+                </CardContent>
+              </Card>
+
+              {/* Aggregated Engagement Metrics - Total across all posts */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="bg-gray-800 border-gray-700">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-400">Total Reactions</p>
+                        <p className="text-2xl font-bold text-red-400">
+                          {formatNumber(newsItemData.newsItem.totalReactions)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">Across all {newsItemData.newsItem.postCount} posts</p>
+                      </div>
+                      <Heart className="h-8 w-8 text-red-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gray-800 border-gray-700">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-400">Total Shares</p>
+                        <p className="text-2xl font-bold text-green-400">
+                          {formatNumber(newsItemData.newsItem.totalShares)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">Across all {newsItemData.newsItem.postCount} posts</p>
+                      </div>
+                      <Share2 className="h-8 w-8 text-green-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gray-800 border-gray-700">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-400">Total Comments</p>
+                        <p className="text-2xl font-bold text-blue-400">
+                          {formatNumber(newsItemData.newsItem.totalComments)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">Across all {newsItemData.newsItem.postCount} posts</p>
+                      </div>
+                      <MessageCircle className="h-8 w-8 text-blue-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Sources and Platforms Section */}
+              <Separator className="bg-gray-700" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="bg-gray-800 border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-white flex items-center gap-2">
+                      <Users className="w-5 h-5" />
+                      All Sources ({newsItemData.newsItem.sourceCount || Array.from(new Set(newsItemData.posts.map(p => p.source))).length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {newsItemData.posts.length > 0 ? (
+                        Array.from(new Set(newsItemData.posts.map(p => p.source))).map((source, index) => (
+                          <Badge key={index} variant="outline" className="border-gray-600 text-gray-300">
                             {source}
                           </Badge>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                        ))
+                      ) : (
+                        <span className="text-gray-500 text-sm">No sources found</span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
 
-                  <Card className="bg-gray-800 border-gray-700">
-                    <CardHeader>
-                      <CardTitle className="text-lg text-white">Platforms ({post.postAnalysis.platforms.length})</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {post.postAnalysis.platforms.map((platform, index) => (
+                <Card className="bg-gray-800 border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-white flex items-center gap-2">
+                      <Globe className="w-5 h-5" />
+                      All Platforms ({newsItemData.newsItem.platformCount || Array.from(new Set(newsItemData.posts.map(p => p.platform))).length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {newsItemData.posts.length > 0 ? (
+                        Array.from(new Set(newsItemData.posts.map(p => p.platform))).map((platform, index) => (
                           <Badge key={index} variant="outline" className="border-purple-600 text-purple-300">
                             {platform}
                           </Badge>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </>
-            )}
+                        ))
+                      ) : (
+                        <span className="text-gray-500 text-sm">No platforms found</span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-            {/* Related Posts Panel */}
-            {post.postAnalysis && (
-              <RelatedPostsPanel
-                relatedPosts={relatedPosts}
-                sources={post.postAnalysis.sources}
-                platforms={post.postAnalysis.platforms}
-                onPostClick={(relatedPost) => {
-                  // Handle related post click
-                  console.log('Related post clicked:', relatedPost)
-                }}
-              />
-            )}
-            
-            {/* Loading State for Related Posts */}
-            {loadingRelated && (
+              {/* All Posts Table - Cross-platform and cross-source analysis */}
               <Card className="bg-gray-800 border-gray-700">
-                <CardContent className="p-6 text-center">
-                  <div className="text-gray-400">Loading related posts...</div>
+                <CardHeader>
+                  <div className="flex items-center justify-between mb-2">
+                    <CardTitle className="text-lg text-white flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5" />
+                      All Posts ({newsItemData.posts.length || newsItemData.newsItem.postCount || 0}) - Cross-Platform Analysis
+                    </CardTitle>
+                    <div className="text-xs text-gray-400 bg-gray-900 px-3 py-1.5 rounded-md border border-gray-700">
+                      <span className="text-red-400 font-semibold">{formatNumber(newsItemData.newsItem.totalReactions)}</span> reactions • 
+                      <span className="text-green-400 font-semibold"> {formatNumber(newsItemData.newsItem.totalShares)}</span> shares • 
+                      <span className="text-blue-400 font-semibold"> {formatNumber(newsItemData.newsItem.totalComments)}</span> comments
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-400">
+                    Showing all posts from different sources and platforms for this news story. Click the link icon to view the original post.
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto -mx-4 px-4">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-gray-700 bg-gray-750">
+                          <TableHead className="text-gray-300 font-semibold w-[140px]">Source</TableHead>
+                          <TableHead className="text-gray-300 font-semibold w-[120px]">Platform</TableHead>
+                          <TableHead className="text-gray-300 font-semibold min-w-[300px]">Post Text</TableHead>
+                          <TableHead className="text-gray-300 font-semibold text-right w-[110px]">Reactions</TableHead>
+                          <TableHead className="text-gray-300 font-semibold text-right w-[100px]">Shares</TableHead>
+                          <TableHead className="text-gray-300 font-semibold text-right w-[110px]">Comments</TableHead>
+                          <TableHead className="text-gray-300 font-semibold w-[110px]">Sentiment</TableHead>
+                          <TableHead className="text-gray-300 font-semibold w-[130px]">Date</TableHead>
+                          <TableHead className="text-gray-300 font-semibold w-[80px] text-center">Link</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {newsItemData.posts.length > 0 ? (
+                          newsItemData.posts.map((postItem) => (
+                            <TableRow key={postItem.id} className="border-gray-700 hover:bg-gray-750/50 transition-colors">
+                              <TableCell className="text-gray-200 font-medium py-3">
+                                <div className="truncate max-w-[140px]" title={postItem.source}>
+                                  {postItem.source}
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-3">
+                                <Badge variant="outline" className="border-purple-600 text-purple-300 bg-purple-950/30">
+                                  {postItem.platform}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-gray-200 py-3">
+                                <div className="max-w-[400px]">
+                                  <div className="line-clamp-2 text-sm leading-relaxed" title={postItem.postText}>
+                                    {postItem.postText}
+                                  </div>
+                                  {postItem.postText.length > 150 && (
+                                    <span className="text-xs text-gray-500 mt-1 block">
+                                      {postItem.postText.length} characters
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-red-400 text-right font-mono font-semibold py-3">
+                                {formatNumber(postItem.reactions)}
+                              </TableCell>
+                              <TableCell className="text-green-400 text-right font-mono font-semibold py-3">
+                                {formatNumber(postItem.shares)}
+                              </TableCell>
+                              <TableCell className="text-blue-400 text-right font-mono font-semibold py-3">
+                                {formatNumber(postItem.comments)}
+                              </TableCell>
+                              <TableCell className="py-3">
+                                <Badge className={`text-xs ${getSentimentColor(postItem.sentiment || 'neutral')}`}>
+                                  {(postItem.sentiment || 'neutral').charAt(0).toUpperCase() + (postItem.sentiment || 'neutral').slice(1)}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-gray-400 text-sm py-3">
+                                <div>
+                                  <div>{dayjs(postItem.postDate).format('MMM DD, YYYY')}</div>
+                                  <div className="text-xs text-gray-500">{dayjs(postItem.postDate).format('HH:mm')}</div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-3 text-center">
+                                {postItem.postLink ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    asChild
+                                    className="h-8 w-8 p-0 hover:bg-gray-700"
+                                  >
+                                    <a href={postItem.postLink} target="_blank" rel="noopener noreferrer" title="Open original post">
+                                      <ExternalLink className="w-4 h-4 text-gray-400 hover:text-white transition-colors" />
+                                    </a>
+                                  </Button>
+                                ) : (
+                                  <span className="text-gray-600 text-xs">-</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={9} className="text-center text-gray-500 py-12">
+                              <div className="flex flex-col items-center gap-2">
+                                <BarChart3 className="w-8 h-8 text-gray-600" />
+                                <span>No posts found for this news item</span>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-400">Failed to load analysis data</div>
+            </div>
+          )}
         </ScrollArea>
       </DialogContent>
     </Dialog>

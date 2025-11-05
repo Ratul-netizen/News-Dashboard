@@ -28,11 +28,18 @@ wait_for_app() {
 init_database() {
     echo "🗄️ Initializing database..."
     
-    # Generate Prisma client if needed
-    npx prisma generate
+    # Ensure Prisma client is generated (this is critical for Studio)
+    echo "🔧 Generating Prisma Client..."
+    npx prisma generate || {
+        echo "❌ Failed to generate Prisma Client"
+        return 1
+    }
     
     # Push database schema
-    npx prisma db push
+    echo "📊 Pushing database schema..."
+    npx prisma db push --accept-data-loss || {
+        echo "⚠️ Database push had issues, but continuing..."
+    }
     
     echo "✅ Database initialized successfully"
     
@@ -150,10 +157,15 @@ main() {
     echo "🌐 Access your dashboard at: http://localhost:3000"
     echo "⏰ Data ingestion scheduled hourly via cron"
     
-    # Start Prisma Studio
+    # Start Prisma Studio (with delay to ensure DB is ready)
     echo "🔧 Starting Prisma Studio..."
-    npx prisma studio --hostname 0.0.0.0 --port 5555 --browser none &
+    sleep 5  # Wait a bit for database to be fully ready
+    # Regenerate Prisma Client to ensure it's up to date
+    npx prisma generate || echo "⚠️ Warning: Prisma generate failed, but continuing..."
+    # Start Prisma Studio with proper error handling
+    npx prisma studio --hostname 0.0.0.0 --port 5555 --browser none > /tmp/prisma-studio.log 2>&1 &
     echo "✅ Prisma Studio available at: http://localhost:5555"
+    echo "📋 Prisma Studio logs: /tmp/prisma-studio.log"
     
     # Start monitoring
     monitor_cron

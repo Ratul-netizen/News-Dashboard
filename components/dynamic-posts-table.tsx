@@ -50,11 +50,47 @@ export function DynamicPostsTable({
   const [selectedPost, setSelectedPost] = useState<TrendingPost | null>(null)
   const [isPostAnalysisOpen, setIsPostAnalysisOpen] = useState(false)
 
+  // Define getPostValue function before it's used
+  const getPostValue = (post: TrendingPost, columnId: string) => {
+    switch (columnId) {
+      case 'postDate': return post.postDate
+      case 'postText': return post.postText
+      case 'category': return post.category
+      case 'sentiment': return post.sentiment
+      case 'source': return post.source
+      case 'reactions': return post.reactions
+      case 'shares': return post.shares
+      case 'comments': return post.comments
+      case 'sourceCount': return post.sourceCount
+      case 'viralityScore': return post.viralityScore
+      case 'sourceWeight': return post.sourceWeight
+      case 'newsFlowWeight': return post.newsFlowWeight
+      case 'newsFlowWeightByCategory': return post.newsFlowWeightByCategory
+      case 'finalTrendingScore': return post.finalTrendingScore
+      default: return null
+    }
+  }
+
   // Calculate pagination
   const totalPages = Math.ceil(posts.length / postsPerPage)
   const startIndex = (currentPage - 1) * postsPerPage
   const endIndex = startIndex + postsPerPage
   const currentPosts = posts.slice(startIndex, endIndex)
+  
+  // Debug logging for pagination
+  useEffect(() => {
+    if (title === "All News Posts") {
+      console.log(`[Pagination Debug] ${title}:`, {
+        totalPosts: posts.length,
+        postsPerPage,
+        totalPages,
+        currentPage,
+        startIndex,
+        endIndex,
+        willShowPagination: totalPages > 1
+      })
+    }
+  }, [posts.length, postsPerPage, totalPages, currentPage, title, startIndex, endIndex])
 
   // Sort posts based on current sort configuration
   const sortedPosts = useMemo(() => {
@@ -291,26 +327,6 @@ export function DynamicPostsTable({
     }
   }
 
-  const getPostValue = (post: TrendingPost, columnId: string) => {
-    switch (columnId) {
-      case 'postDate': return post.postDate
-      case 'postText': return post.postText
-      case 'category': return post.category
-      case 'sentiment': return post.sentiment
-      case 'source': return post.source
-      case 'reactions': return post.reactions
-      case 'shares': return post.shares
-      case 'comments': return post.comments
-      case 'sourceCount': return post.sourceCount
-      case 'viralityScore': return post.viralityScore
-      case 'sourceWeight': return post.sourceWeight
-      case 'newsFlowWeight': return post.newsFlowWeight
-      case 'newsFlowWeightByCategory': return post.newsFlowWeightByCategory
-      case 'finalTrendingScore': return post.finalTrendingScore
-      default: return null
-    }
-  }
-
   return (
     <div>
       <Card className="bg-[#1E1E1E] border-gray-700 text-white" data-table-title={title}>
@@ -395,15 +411,16 @@ export function DynamicPostsTable({
           </div>
         )}
 
-        {totalPages > 1 && (
+        {posts.length > 0 && (
           <div className="flex flex-col items-center gap-4 py-6 border-t border-gray-700">
-            {/* Page Info */}
+            {/* Page Info - Always show when posts exist */}
             <div className="text-sm text-gray-400">
               Showing {startIndex + 1} to {Math.min(endIndex, posts.length)} of {posts.length} posts
             </div>
             
-            {/* Pagination Controls */}
-            <div className="flex items-center gap-2">
+            {/* Pagination Controls - Only show when there are multiple pages */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
               {/* Previous Button */}
               <Button
                 variant="outline"
@@ -460,26 +477,7 @@ export function DynamicPostsTable({
                 Next
               </Button>
             </div>
-            
-            {/* Posts Per Page Selector */}
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <span>Posts per page:</span>
-              <select 
-                value={postsPerPage} 
-                onChange={(e) => {
-                  const newPostsPerPage = parseInt(e.target.value)
-                  // Update postsPerPage in parent component if needed
-                  // For now, we'll just reset to page 1
-                  setCurrentPage(1)
-                }}
-                className="bg-gray-700 border border-gray-600 text-white rounded px-2 py-1 text-sm"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
+            )}
           </div>
         )}
       </CardContent>

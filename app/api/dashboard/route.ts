@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Parse filters from query parameters
     const filters: DashboardFilters = {
       dateRange: {
-        from: searchParams.get("from") ? new Date(searchParams.get("from")!) : dayjs().subtract(7, "days").toDate(),
+        from: searchParams.get("from") ? new Date(searchParams.get("from")!) : dayjs().subtract(365, "days").toDate(), // Show last year by default
         to: searchParams.get("to") ? new Date(searchParams.get("to")!) : new Date(),
       },
       categories: searchParams.get("categories")?.split(",").filter(Boolean) || [],

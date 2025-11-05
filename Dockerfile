@@ -22,8 +22,8 @@ RUN pnpm install
 # Copy application code
 COPY . .
 
-# Generate Prisma client
-RUN npx prisma generate
+# Generate Prisma client (ensure it's available for Studio)
+RUN npx prisma generate || echo "Warning: Prisma generate failed during build, will retry at runtime"
 
 # Make scripts executable
 RUN chmod +x scripts/*.sh

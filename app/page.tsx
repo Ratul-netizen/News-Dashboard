@@ -48,7 +48,7 @@ export default function Dashboard() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [filters, setFilters] = useState<DashboardFilters>({
     dateRange: {
-      from: dayjs().subtract(7, "days").toDate(),
+      from: dayjs().subtract(365, "days").toDate(), // Show last year by default instead of 7 days
       to: new Date(),
     },
     categories: [],
@@ -440,7 +440,7 @@ export default function Dashboard() {
               onRemoveColumn={handleRemoveColumn}
               onReorderColumns={handleReorderColumns}
               showColumnManagement={false}
-              postsPerPage={filteredAllPosts.length || 1000}
+              postsPerPage={20}
             />
             
             <ChartsSection chartData={filteredChartData || data.chartData} />

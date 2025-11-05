@@ -41,7 +41,7 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
   const clearFilters = () => {
     const clearedFilters: DashboardFilters = {
       dateRange: {
-        from: dayjs().subtract(7, "days").toDate(),
+        from: dayjs().subtract(365, "days").toDate(), // Match default: 365 days
         to: new Date(),
       },
       categories: [],
@@ -88,9 +88,27 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
                   defaultMonth={dateRange?.from}
                   selected={{ from: dateRange.from, to: dateRange.to }}
                   onSelect={(range) => {
-                    if (range?.from) {
-                      // Handle partial selection - if only from date is selected, use it as both from and to
-                      const toDate = range.to || range.from
+                    // Only update when both dates are selected (complete range)
+                    // This prevents single-day filters from being accidentally created
+                    if (range?.from && range?.to) {
+                      // Prevent single-day filters - if from and to are the same day, expand to default range
+                      const fromDate = new Date(range.from)
+                      const toDate = new Date(range.to)
+                      fromDate.setHours(0, 0, 0, 0)
+                      toDate.setHours(0, 0, 0, 0)
+                      
+                      // If same day, use default range instead
+                      if (fromDate.getTime() === toDate.getTime()) {
+                        handleDateRangeChange({ 
+                          from: dayjs().subtract(365, "days").toDate(), 
+                          to: new Date() 
+                        })
+                      } else {
+                        handleDateRangeChange({ from: range.from, to: range.to })
+                      }
+                    } else if (range?.from && !range?.to) {
+                      // If only from date is selected, keep existing to date or use today
+                      const toDate = dateRange?.to || new Date()
                       handleDateRangeChange({ from: range.from, to: toDate })
                     }
                   }}
@@ -147,17 +165,17 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
           </div>
         </div>
 
-        {/* Active Filters Display */}
+        {/* Active Filters Display - Only show if filters differ from defaults */}
         {(filters.categories.length > 0 || filters.sources.length > 0 || filters.platforms.length > 0 || 
           (filters.dateRange.from && filters.dateRange.to && 
-           (dayjs(filters.dateRange.from).format('YYYY-MM-DD') !== dayjs().subtract(7, 'days').format('YYYY-MM-DD') ||
+           (dayjs(filters.dateRange.from).format('YYYY-MM-DD') !== dayjs().subtract(365, 'days').format('YYYY-MM-DD') ||
             dayjs(filters.dateRange.to).format('YYYY-MM-DD') !== dayjs().format('YYYY-MM-DD')))) && (
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <span className="text-sm text-gray-400">Active filters:</span>
             
-            {/* Date Range Badge */}
+            {/* Date Range Badge - Only show if different from default (365 days) */}
             {filters.dateRange.from && filters.dateRange.to && 
-             (dayjs(filters.dateRange.from).format('YYYY-MM-DD') !== dayjs().subtract(7, 'days').format('YYYY-MM-DD') ||
+             (dayjs(filters.dateRange.from).format('YYYY-MM-DD') !== dayjs().subtract(365, 'days').format('YYYY-MM-DD') ||
               dayjs(filters.dateRange.to).format('YYYY-MM-DD') !== dayjs().format('YYYY-MM-DD')) && (
               <Badge variant="secondary" className="bg-orange-900 text-orange-100">
                 Date: {dayjs(filters.dateRange.from).format("MMM DD")} - {dayjs(filters.dateRange.to).format("MMM DD, YYYY")}
