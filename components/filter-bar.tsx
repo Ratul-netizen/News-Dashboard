@@ -41,8 +41,8 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
   const clearFilters = () => {
     const clearedFilters: DashboardFilters = {
       dateRange: {
-        from: dayjs().subtract(365, "days").toDate(), // Match default: 365 days
-        to: new Date(),
+        from: dayjs().subtract(100, "years").toDate(), // Very wide default - effectively no filter
+        to: dayjs().add(1, "year").toDate(),
       },
       categories: [],
       sources: [],
@@ -50,6 +50,11 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
     }
     onFiltersChange(clearedFilters)
   }
+
+  // Check if date range is the default wide range (effectively no filter)
+  const isDefaultDateRange = 
+    dayjs(filters.dateRange.from).isBefore(dayjs().subtract(50, "years")) &&
+    dayjs(filters.dateRange.to).isAfter(dayjs().add(1, "month"))
 
   return (
     <div className="sticky top-[73px] z-40 bg-[#1A1A1A] border-b border-gray-800 mt-[73px]">
@@ -97,11 +102,11 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
                       fromDate.setHours(0, 0, 0, 0)
                       toDate.setHours(0, 0, 0, 0)
                       
-                      // If same day, use default range instead
+                      // If same day, use default wide range instead (effectively no filter)
                       if (fromDate.getTime() === toDate.getTime()) {
                         handleDateRangeChange({ 
-                          from: dayjs().subtract(365, "days").toDate(), 
-                          to: new Date() 
+                          from: dayjs().subtract(100, "years").toDate(), 
+                          to: dayjs().add(1, "year").toDate()
                         })
                       } else {
                         handleDateRangeChange({ from: range.from, to: range.to })
@@ -166,17 +171,14 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
         </div>
 
         {/* Active Filters Display - Only show if filters differ from defaults */}
+        {/* Date filter is considered "active" only if it's a narrow range (not the default wide range) */}
         {(filters.categories.length > 0 || filters.sources.length > 0 || filters.platforms.length > 0 || 
-          (filters.dateRange.from && filters.dateRange.to && 
-           (dayjs(filters.dateRange.from).format('YYYY-MM-DD') !== dayjs().subtract(365, 'days').format('YYYY-MM-DD') ||
-            dayjs(filters.dateRange.to).format('YYYY-MM-DD') !== dayjs().format('YYYY-MM-DD')))) && (
+          (filters.dateRange.from && filters.dateRange.to && !isDefaultDateRange)) && (
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <span className="text-sm text-gray-400">Active filters:</span>
             
-            {/* Date Range Badge - Only show if different from default (365 days) */}
-            {filters.dateRange.from && filters.dateRange.to && 
-             (dayjs(filters.dateRange.from).format('YYYY-MM-DD') !== dayjs().subtract(365, 'days').format('YYYY-MM-DD') ||
-              dayjs(filters.dateRange.to).format('YYYY-MM-DD') !== dayjs().format('YYYY-MM-DD')) && (
+            {/* Date Range Badge - Only show if it's a narrow range (not the default wide range) */}
+            {filters.dateRange.from && filters.dateRange.to && !isDefaultDateRange && (
               <Badge variant="secondary" className="bg-orange-900 text-orange-100">
                 Date: {dayjs(filters.dateRange.from).format("MMM DD")} - {dayjs(filters.dateRange.to).format("MMM DD, YYYY")}
               </Badge>

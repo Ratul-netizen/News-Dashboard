@@ -76,6 +76,14 @@ interface NewsItemDetails {
     comments: number
     posts: number
   }>
+  relatedNews?: Array<{
+    id: string
+    category: string | null
+    primarySource: string
+    totalReactions: number
+    postCount: number
+    firstPostDate: Date
+  }>
 }
 
 interface SimplePostAnalysisModalProps {
@@ -95,23 +103,150 @@ export function SimplePostAnalysisModal({ isOpen, onClose, post }: SimplePostAna
     }
   }, [isOpen, post])
 
+  // Renamed for clarity, handles routing logic
   const fetchNewsItemDetails = async () => {
     if (!post) return
-    
+
+    // Helper: Logic to load raw post data (API or local)
+    const loadRawPostData = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch(`/api/analysis/related?postId=${post.id}`)
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.type === 'group') {
+            setNewsItemData(data)
+          } else {
+            // Virtual group
+            const mainPost = data.mainPost
+            const similarPosts = data.similarPosts || []
+            const relatedNews = data.relatedNews || []
+
+            const sentiment = mainPost.sentiment?.toLowerCase() || 'neutral'
+            const singlePostAnalysis = {
+              sources: Array.from(new Set(similarPosts.map((p: any) => p.source))) as string[],
+              platforms: Array.from(new Set(similarPosts.map((p: any) => p.platform))) as string[],
+              sampleTexts: [mainPost.postText],
+              postLinks: mainPost.postLink ? [mainPost.postLink] : [],
+              totalEngagement: similarPosts.reduce((acc: number, p: any) => acc + (p.reactions || 0) + (p.shares || 0) + (p.comments || 0), 0),
+              sentimentBreakdown: {
+                positive: similarPosts.filter((p: any) => p.sentiment?.toLowerCase().includes('positive')).length,
+                neutral: similarPosts.filter((p: any) => p.sentiment?.toLowerCase().includes('neutral')).length,
+                negative: similarPosts.filter((p: any) => p.sentiment?.toLowerCase().includes('negative')).length,
+              }
+            }
+
+            setNewsItemData({
+              newsItem: {
+                id: mainPost.id,
+                groupKey: mainPost.id,
+                category: mainPost.category,
+                primarySource: mainPost.source,
+                primaryPlatform: mainPost.platform,
+                totalReactions: singlePostAnalysis.totalEngagement,
+                totalShares: similarPosts.reduce((acc: number, p: any) => acc + (p.shares || 0), 0),
+                totalComments: similarPosts.reduce((acc: number, p: any) => acc + (p.comments || 0), 0),
+                sourceCount: singlePostAnalysis.sources.length,
+                platformCount: singlePostAnalysis.platforms.length,
+                postCount: similarPosts.length,
+                avgTrendingScore: mainPost.trendingScore,
+                firstPostDate: mainPost.postDate,
+                lastPostDate: mainPost.postDate,
+                postAnalysis: singlePostAnalysis
+              },
+              posts: similarPosts.map((p: any) => ({
+                id: p.id,
+                postId: p.postId,
+                postText: p.postText,
+                postDate: p.postDate,
+                postLink: p.postLink,
+                platform: p.platform,
+                source: p.source,
+                reactions: p.reactions,
+                shares: p.shares,
+                comments: p.comments,
+                sentiment: p.sentiment,
+                featuredImagesPath: p.featuredImagesPath
+              })),
+              relatedNews: relatedNews
+            })
+          }
+        } else {
+          throw new Error("API failed")
+        }
+      } catch (e) {
+        // Ultimate fallback: Local construction
+        console.warn("Falling back to local data construction due to API error:", e)
+        const sentiment = post.sentiment?.toLowerCase() || 'neutral'
+        setNewsItemData({
+          newsItem: {
+            id: post.id,
+            groupKey: post.id,
+            category: post.category,
+            primarySource: post.source,
+            primaryPlatform: post.platform,
+            totalReactions: post.reactions,
+            totalShares: post.shares,
+            totalComments: post.comments,
+            sourceCount: 1,
+            platformCount: 1,
+            postCount: 1,
+            avgTrendingScore: post.trendingScore,
+            firstPostDate: post.postDate,
+            lastPostDate: post.postDate,
+            postAnalysis: {
+              sources: [post.source],
+              platforms: [post.platform],
+              sentimentBreakdown: {
+                positive: sentiment === 'positive' ? 1 : 0,
+                neutral: sentiment === 'neutral' ? 1 : 0,
+                negative: sentiment === 'negative' ? 1 : 0,
+              }
+            } as any
+          },
+          posts: [{
+            id: post.id,
+            postId: post.id,
+            postText: post.postText,
+            postDate: post.postDate,
+            postLink: post.postLink,
+            platform: post.platform,
+            source: post.source,
+            reactions: post.reactions,
+            shares: post.shares,
+            comments: post.comments,
+            sentiment: post.sentiment,
+            featuredImagesPath: null
+          }]
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    // 1. If explicitly raw post, load raw
+    if (post.type === 'raw-post') {
+      await loadRawPostData()
+      return
+    }
+
+    // 2. Otherwise/Default: Try to load as News Group
     try {
       setLoading(true)
-      // post.id is actually the NewsItem ID from the dashboard API
       const response = await fetch(`/api/news-item/${post.id}`)
       if (response.ok) {
         const data = await response.json()
         setNewsItemData(data)
+        setLoading(false)
       } else {
-        console.error('Failed to fetch news item details')
+        // 3. Fallback: If 404/Error, it might be a raw post with missing 'type'
+        console.warn('Failed to fetch news item, trying raw post fallback...')
+        await loadRawPostData()
       }
     } catch (error) {
-      console.error('Error fetching news item details:', error)
-    } finally {
-      setLoading(false)
+      console.error('Error fetching news item details, trying fallback:', error)
+      await loadRawPostData()
     }
   }
 
@@ -377,8 +512,8 @@ export function SimplePostAnalysisModal({ isOpen, onClose, post }: SimplePostAna
                       All Posts ({newsItemData.posts.length || newsItemData.newsItem.postCount || 0}) - Cross-Platform Analysis
                     </CardTitle>
                     <div className="text-xs text-gray-400 bg-gray-900 px-3 py-1.5 rounded-md border border-gray-700">
-                      <span className="text-red-400 font-semibold">{formatNumber(newsItemData.newsItem.totalReactions)}</span> reactions • 
-                      <span className="text-green-400 font-semibold"> {formatNumber(newsItemData.newsItem.totalShares)}</span> shares • 
+                      <span className="text-red-400 font-semibold">{formatNumber(newsItemData.newsItem.totalReactions)}</span> reactions •
+                      <span className="text-green-400 font-semibold"> {formatNumber(newsItemData.newsItem.totalShares)}</span> shares •
                       <span className="text-blue-400 font-semibold"> {formatNumber(newsItemData.newsItem.totalComments)}</span> comments
                     </div>
                   </div>
@@ -481,6 +616,48 @@ export function SimplePostAnalysisModal({ isOpen, onClose, post }: SimplePostAna
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Related News Section */}
+              {newsItemData.relatedNews && newsItemData.relatedNews.length > 0 && (
+                <>
+                  <Separator className="bg-gray-700" />
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-blue-400" />
+                      Related News
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {newsItemData.relatedNews.map((news) => (
+                        <Card key={news.id} className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
+                          <CardContent className="p-4">
+                            <div className="flex justify-between items-start mb-2">
+                              <Badge className={`${getCategoryColor(news.category || 'Other')}`}>
+                                {news.category}
+                              </Badge>
+                              <span className="text-xs text-gray-500">
+                                {dayjs(news.firstPostDate).format('MMM DD')}
+                              </span>
+                            </div>
+                            <div className="mb-3">
+                              <p className="text-sm font-medium text-white mb-1">
+                                {news.primarySource} - {news.postCount} posts
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-4 text-xs text-gray-400">
+                              <span className="flex items-center gap-1">
+                                <Heart className="w-3 h-3 text-red-400" /> {formatNumber(news.totalReactions)}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3 text-blue-400" /> {news.postCount} posts
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-center py-12">

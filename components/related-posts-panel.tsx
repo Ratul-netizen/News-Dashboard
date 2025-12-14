@@ -4,7 +4,7 @@ import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { TrendingPost } from '@/lib/types'
-import { formatScore, getCategoryWeightColor } from '@/lib/utils/score-formatter'
+import { formatScore } from '@/lib/utils/score-formatter'
 import { ExternalLink, Users, Share2, MessageCircle } from 'lucide-react'
 
 interface RelatedPostsPanelProps {
@@ -20,6 +20,35 @@ export function RelatedPostsPanel({
   platforms, 
   onPostClick 
 }: RelatedPostsPanelProps) {
+  const getCategoryBadgeClass = (category?: string | null) => {
+    switch ((category || 'uncategorized').toLowerCase()) {
+      case 'politics': return 'border-blue-500 text-blue-500'
+      case 'crime': return 'border-red-500 text-red-500'
+      case 'corruption': return 'border-orange-500 text-orange-500'
+      case 'accident': return 'border-yellow-500 text-yellow-500'
+      case 'business': return 'border-emerald-500 text-emerald-500'
+      case 'technology': return 'border-purple-500 text-purple-500'
+      case 'entertainment': return 'border-pink-500 text-pink-500'
+      case 'cyber crime': return 'border-indigo-500 text-indigo-500'
+      case 'international': return 'border-teal-500 text-teal-500'
+      case 'national': return 'border-cyan-500 text-cyan-500'
+      case 'sports': return 'border-lime-500 text-lime-500'
+      case 'health': return 'border-rose-500 text-rose-500'
+      case 'education': return 'border-violet-500 text-violet-500'
+      case 'environment': return 'border-green-500 text-green-500'
+      case 'science': return 'border-sky-500 text-sky-500'
+      default: return 'border-gray-500 text-gray-500'
+    }
+  }
+
+  const getSentimentBadgeClass = (sentiment?: string | null) => {
+    switch ((sentiment || 'neutral').toLowerCase()) {
+      case 'positive': return 'border-green-500 text-green-500'
+      case 'negative': return 'border-red-500 text-red-500'
+      default: return 'border-gray-500 text-gray-500'
+    }
+  }
+
   if (!relatedPosts || relatedPosts.length === 0) {
     return null
   }
@@ -63,21 +92,13 @@ export function RelatedPostsPanel({
                   <div className="flex items-center gap-2 mb-2">
                     <Badge 
                       variant="outline" 
-                      className="text-xs"
-                      style={{ 
-                        borderColor: getCategoryWeightColor(post.category || 'uncategorized'),
-                        color: getCategoryWeightColor(post.category || 'uncategorized')
-                      }}
+                      className={`text-xs ${getCategoryBadgeClass(post.category)}`}
                     >
                       {post.category || 'uncategorized'}
                     </Badge>
                     <Badge 
                       variant="outline" 
-                      className="text-xs"
-                      style={{ 
-                        borderColor: getCategoryWeightColor(post.sentiment),
-                        color: getCategoryWeightColor(post.sentiment)
-                      }}
+                      className={`text-xs ${getSentimentBadgeClass(post.sentiment)}`}
                     >
                       {post.sentiment}
                     </Badge>

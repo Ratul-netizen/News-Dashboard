@@ -48,8 +48,8 @@ export default function Dashboard() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [filters, setFilters] = useState<DashboardFilters>({
     dateRange: {
-      from: dayjs().subtract(365, "days").toDate(), // Show last year by default instead of 7 days
-      to: new Date(),
+      from: dayjs().subtract(100, "years").toDate(), // Very wide default - effectively no date filter
+      to: dayjs().add(1, "year").toDate(), // Include future dates too
     },
     categories: [],
     sources: [],
@@ -80,27 +80,32 @@ export default function Dashboard() {
 
     // Apply category filter
     if (filters.categories.length > 0) {
-      filtered = filtered.filter((post) => 
+      filtered = filtered.filter((post) =>
         post.category && filters.categories.includes(post.category)
       )
     }
 
     // Apply source filter
     if (filters.sources.length > 0) {
-      filtered = filtered.filter((post) => 
+      filtered = filtered.filter((post) =>
         filters.sources.includes(post.source)
       )
     }
 
     // Apply platform filter
     if (filters.platforms.length > 0) {
-      filtered = filtered.filter((post) => 
+      filtered = filtered.filter((post) =>
         filters.platforms.includes(post.platform)
       )
     }
 
-    // Apply date range filter
-    if (filters.dateRange.from && filters.dateRange.to) {
+    // Apply date range filter - only if user explicitly set a narrow date range
+    // Skip date filtering if it's the default wide range (effectively showing all posts)
+    const isDefaultDateRange =
+      dayjs(filters.dateRange.from).isBefore(dayjs().subtract(50, "years")) &&
+      dayjs(filters.dateRange.to).isAfter(dayjs().add(1, "month"))
+
+    if (!isDefaultDateRange && filters.dateRange.from && filters.dateRange.to) {
       filtered = filtered.filter((post) => {
         const postDate = new Date(post.postDate)
         // Set time to start of day for from date and end of day for to date
@@ -137,27 +142,32 @@ export default function Dashboard() {
 
     // Apply category filter
     if (filters.categories.length > 0) {
-      filtered = filtered.filter((post) => 
+      filtered = filtered.filter((post) =>
         post.category && filters.categories.includes(post.category)
       )
     }
 
     // Apply source filter
     if (filters.sources.length > 0) {
-      filtered = filtered.filter((post) => 
+      filtered = filtered.filter((post) =>
         filters.sources.includes(post.source)
       )
     }
 
     // Apply platform filter
     if (filters.platforms.length > 0) {
-      filtered = filtered.filter((post) => 
+      filtered = filtered.filter((post) =>
         filters.platforms.includes(post.platform)
       )
     }
 
-    // Apply date range filter
-    if (filters.dateRange.from && filters.dateRange.to) {
+    // Apply date range filter - only if user explicitly set a narrow date range
+    // Skip date filtering if it's the default wide range (effectively showing all posts)
+    const isDefaultDateRange =
+      dayjs(filters.dateRange.from).isBefore(dayjs().subtract(50, "years")) &&
+      dayjs(filters.dateRange.to).isAfter(dayjs().add(1, "month"))
+
+    if (!isDefaultDateRange && filters.dateRange.from && filters.dateRange.to) {
       filtered = filtered.filter((post) => {
         const postDate = new Date(post.postDate)
         // Set time to start of day for from date and end of day for to date
@@ -269,7 +279,7 @@ export default function Dashboard() {
     if (columnToAdd) {
       // Position new column after the Source column (position 4)
       const sourceColumnPosition = 4
-      
+
       // Find the highest position among customizable columns that come after Source
       const maxPosition = Math.max(
         sourceColumnPosition,
@@ -277,10 +287,10 @@ export default function Dashboard() {
           .filter(col => !ColumnConfigService.isColumnFixed(col.id) && col.position > sourceColumnPosition)
           .map(col => col.position)
       )
-      
+
       const newColumn = { ...columnToAdd, position: maxPosition + 1 }
       const newColumns = [...currentColumns, newColumn]
-      
+
       // Sort by position
       newColumns.sort((a, b) => a.position - b.position)
       setCurrentColumns(newColumns)
@@ -342,22 +352,22 @@ export default function Dashboard() {
     try {
       setIsIngesting(true)
       console.log('🔄 Starting manual data refresh...')
-      
+
       // Trigger data ingestion
-      const ingestResponse = await fetch("/api/ingest", { 
+      const ingestResponse = await fetch("/api/ingest", {
         method: "POST"
       })
       if (!ingestResponse.ok) {
         throw new Error(`Ingest failed: ${ingestResponse.statusText}`)
       }
-      
+
       const ingestResult = await ingestResponse.json()
       console.log('✅ Data ingestion completed:', ingestResult)
-      
+
       // Refresh dashboard data
       await fetchDashboardData()
       setLastRefresh(new Date())
-      
+
       console.log('🎉 Manual refresh completed successfully!')
     } catch (error) {
       console.error("❌ Error refreshing data:", error)
@@ -398,9 +408,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#1E1E1E] text-white">
-      <DashboardHeader 
-        onManualRefresh={handleManualRefresh} 
-        onSearch={handleSearch} 
+      <DashboardHeader
+        onManualRefresh={handleManualRefresh}
+        onSearch={handleSearch}
         searchQuery={searchQuery}
       />
 
@@ -418,7 +428,7 @@ export default function Dashboard() {
         {data && (
           <>
             <HighlightCards metrics={filteredHighlightMetrics || data.highlightMetrics} />
-            
+
             {/* Top 10 Viral Posts Table with Dynamic Columns */}
             <DynamicPostsTable
               title="Top 10 Viral Posts"
@@ -430,7 +440,7 @@ export default function Dashboard() {
               showColumnManagement={true}
               postsPerPage={10}
             />
-            
+
             {/* All News Posts Table with Dynamic Columns */}
             <DynamicPostsTable
               title="All News Posts"
@@ -442,7 +452,7 @@ export default function Dashboard() {
               showColumnManagement={false}
               postsPerPage={20}
             />
-            
+
             <ChartsSection chartData={filteredChartData || data.chartData} />
 
             {searchQuery.trim() && (

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       await prisma.$connect()
     } catch (dbError) {
       console.error("[v0] Database connection failed:", dbError)
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: "Database not ready. Please wait for initialization to complete.",
         status: "initializing"
       }, { status: 503 })
@@ -22,10 +22,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
 
     // Parse filters from query parameters
+    const fromParam = searchParams.get("from")
+    const toParam = searchParams.get("to")
+
+    // Use a very wide default date range (20 years) to include all posts by default
+    const defaultFromDate = dayjs().subtract(20, "years").toDate()
+
     const filters: DashboardFilters = {
       dateRange: {
-        from: searchParams.get("from") ? new Date(searchParams.get("from")!) : dayjs().subtract(365, "days").toDate(), // Show last year by default
-        to: searchParams.get("to") ? new Date(searchParams.get("to")!) : new Date(),
+        from: fromParam ? new Date(fromParam) : defaultFromDate,
+        to: toParam ? new Date(toParam) : new Date(),
       },
       categories: searchParams.get("categories")?.split(",").filter(Boolean) || [],
       sources: searchParams.get("sources")?.split(",").filter(Boolean) || [],
@@ -33,16 +39,28 @@ export async function GET(request: NextRequest) {
     }
 
     console.log("[v0] Fetching dashboard data with filters:", filters)
+    console.log(`[v0] Date range: ${filters.dateRange.from.toISOString()} to ${filters.dateRange.to.toISOString()}`)
+
+    // First, get total count without date filter to see how many items exist
+    const totalCount = await prisma.newsItem.count({})
+    console.log(`[v0] Total news items in database: ${totalCount}`)
 
     // Build where clause for filtering
-    // Include any news item whose time window overlaps the selected range
-    // Handle cases where lastPostDate may be null by falling back to firstPostDate
-    // Overlapping window: firstPostDate <= to AND lastPostDate >= from
-    // Note: lastPostDate is non-nullable in schema, so no null checks
-    const whereClause: any = {
-      firstPostDate: { lte: filters.dateRange.to },
-      lastPostDate: { gte: filters.dateRange.from },
-    }
+    // NOTE: Date filter removed - API returns ALL posts regardless of date
+    // Frontend can filter by date if needed, but API should return everything
+    const whereClause: any = {}
+
+    // Date filtering disabled - return all posts
+    // Uncomment below if you want to re-enable date filtering:
+    // if (fromParam || toParam) {
+    //   whereClause.firstPostDate = { lte: filters.dateRange.to }
+    //   whereClause.lastPostDate = { gte: filters.dateRange.from }
+    // }
+
+    console.log(`[v0] Date filter DISABLED - returning all posts regardless of date`)
+
+    const countWithFilter = await prisma.newsItem.count({ where: whereClause })
+    console.log(`[v0] News items matching filters (excluding date): ${countWithFilter}`)
 
     if (filters.categories.length > 0) {
       whereClause.category = { in: filters.categories }
@@ -56,7 +74,22 @@ export async function GET(request: NextRequest) {
       whereClause.primaryPlatform = { in: filters.platforms }
     }
 
-    // Fetch trending posts (top 10 by trending score)
+    // Build where clause for posts (slightly different field names)
+    const whereClausePosts: any = {}
+
+    if (filters.categories.length > 0) {
+      whereClausePosts.category = { in: filters.categories }
+    }
+
+    if (filters.sources.length > 0) {
+      whereClausePosts.source = { in: filters.sources }
+    }
+
+    if (filters.platforms.length > 0) {
+      whereClausePosts.platform = { in: filters.platforms }
+    }
+
+    // Fetch trending posts (top 10 by trending score) - KEEPS GROUPING
     const trendingPosts = await prisma.newsItem.findMany({
       where: whereClause,
       orderBy: { avgTrendingScore: "desc" },
@@ -69,47 +102,44 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Fetch all posts (same shape, no top-10 limit)
-    const allNewsItems = await prisma.newsItem.findMany({
-      where: whereClause,
-      orderBy: { avgTrendingScore: "desc" },
-      include: {
-        posts: {
-          take: 1,
-          orderBy: { trendingScore: "desc" },
-        },
-      },
+    // Fetch all posts - SHOWS INDIVIDUAL POSTS (UNGROUPED)
+    const allRawPosts = await prisma.post.findMany({
+      where: whereClausePosts,
+      orderBy: { postDate: "desc" },
+      take: 1000, // Limit to 1000 most recent posts
     })
+
+    console.log(`[v0] Fetched ${allRawPosts.length} raw posts from database`)
 
     // Initialize scoring service
     const scoringService = new ContentScoringService()
-    
+
     // Calculate max trending score for scaling
-    const maxTrendingScore = allNewsItems.length > 0 
-      ? Math.max(...allNewsItems.map(r => r.avgTrendingScore || 0))
+    const maxTrendingScore = trendingPosts.length > 0
+      ? Math.max(...trendingPosts.map((item: typeof trendingPosts[number]) => item.avgTrendingScore || 0))
       : 1
 
-    // Helper function to format posts with advanced scoring
+    // Helper function to format grouped news items
     const formatPostWithScoring = (item: any): TrendingPost => {
       const primaryPost = item.posts[0]
       const postAnalysis: PostAnalysis | null = item.postAnalysisJson ? JSON.parse(item.postAnalysisJson) : null
 
       // Calculate days difference from post date
       const daysDifference = scoringService.calculateDaysDifference(item.firstPostDate)
-      
+
       // Calculate virality score from post analysis
-      const viralityScore = postAnalysis 
+      const viralityScore = postAnalysis
         ? scoringService.calculateViralityScore(JSON.stringify(postAnalysis))
         : 1
 
       // Calculate source weight (using estimated values for missing data)
-      const estimatedFollowers = 1000 // Default value - you may want to add this to your database
+      const estimatedFollowers = 1000 // Default value
       const estimatedPostsPerDay = scoringService.calculatePostsPerDay(
         item.sourceCount || 1,
         item.firstPostDate,
         item.lastPostDate || item.firstPostDate
       )
-      
+
       const sourceWeight = scoringService.calculateSourceWeight(
         item.totalReactions || 0,
         estimatedFollowers,
@@ -155,14 +185,44 @@ export async function GET(request: NextRequest) {
         viralityScore,
         finalTrendingScore,
         sentiment: primaryPost?.sentiment || "neutral",
+        type: "news-item",
       }
     }
 
-    // Transform to TrendingPost format with advanced scoring
+    // Helper function to format raw posts
+    const formatRawPost = (post: any): TrendingPost => {
+      return {
+        id: post.id, // Use post ID directly
+        postText: post.postText || "",
+        category: post.category,
+        source: post.source,
+        platform: post.platform,
+        reactions: post.reactions,
+        shares: post.shares,
+        comments: post.comments,
+        sourceCount: 1, // Single post = 1 source
+        postDate: post.postDate,
+        postLink: post.postLink || null,
+        postAnalysis: null,
+        trendingScore: post.trendingScore,
+        // Default scoring fields for raw posts
+        sourceWeight: 0,
+        newsFlowWeight: 0,
+        newsFlowWeightByCategory: 0,
+        viralityScore: 0,
+        finalTrendingScore: post.trendingScore,
+        sentiment: post.sentiment || "neutral",
+        type: "raw-post",
+      }
+    }
+
+    // Transform to TrendingPost format
     const formattedTrendingPosts: TrendingPost[] = trendingPosts.map(formatPostWithScoring)
 
-    // Transform all to TrendingPost format with advanced scoring
-    const formattedAllPosts: TrendingPost[] = allNewsItems.map(formatPostWithScoring)
+    // Transform raw posts to TrendingPost format
+    const formattedAllPosts: TrendingPost[] = allRawPosts.map(formatRawPost)
+
+    console.log(`[v0] Returning ${formattedAllPosts.length} formatted posts to frontend`)
 
     // Get highlight metrics
     const highlightMetrics = await getHighlightMetrics(whereClause)
@@ -237,6 +297,15 @@ async function getHighlightMetrics(whereClause: any) {
 }
 
 async function getChartData(whereClause: any) {
+  type CategoryStat = {
+    category: string | null
+    _count: { id: number }
+    _sum: {
+      totalReactions: number | null
+      totalShares: number | null
+      totalComments: number | null
+    }
+  }
   // News flow by category (pie chart data)
   const categoryStats = await prisma.newsItem.groupBy({
     by: ["category"],
@@ -249,7 +318,15 @@ async function getChartData(whereClause: any) {
     },
   })
 
-  const newsFlowData = categoryStats.map((stat) => ({
+  type NewsFlowDatum = {
+    category: string
+    count: number
+    reactions: number
+    shares: number
+    comments: number
+  }
+
+  const newsFlowData: NewsFlowDatum[] = categoryStats.map((stat: CategoryStat) => ({
     category: stat.category || "Uncategorized",
     count: stat._count.id,
     reactions: stat._sum.totalReactions || 0,
@@ -264,7 +341,12 @@ async function getChartData(whereClause: any) {
     _count: { id: true },
   })
 
-  const sentimentData = sentimentStats.map((stat) => ({
+  type SentimentStat = {
+    sentiment: string | null
+    _count: { id: number }
+  }
+
+  const sentimentData = sentimentStats.map((stat: SentimentStat) => ({
     sentiment: stat.sentiment || "neutral",
     count: stat._count.id,
   }))
@@ -286,7 +368,16 @@ async function getChartData(whereClause: any) {
     take: 12,
   })
 
-  const sourceEngagementData = sourceStats.map((stat) => ({
+  type SourceStat = {
+    primarySource: string | null
+    _sum: {
+      totalReactions: number | null
+      totalShares: number | null
+      totalComments: number | null
+    }
+  }
+
+  const sourceEngagementData = sourceStats.map((stat: SourceStat) => ({
     source: stat.primarySource,
     reactions: stat._sum.totalReactions || 0,
     shares: stat._sum.totalShares || 0,
@@ -310,20 +401,23 @@ async function getChartData(whereClause: any) {
 
 async function getFilterOptions() {
   // Get unique categories
-  const categories = await prisma.newsItem.findMany({
+  type CategoryRecord = { category: string | null }
+  const categories: CategoryRecord[] = await prisma.newsItem.findMany({
     select: { category: true },
     distinct: ["category"],
     where: { category: { not: null } },
   })
 
   // Get unique sources
-  const sources = await prisma.newsItem.findMany({
+  type SourceRecord = { primarySource: string | null }
+  const sources: SourceRecord[] = await prisma.newsItem.findMany({
     select: { primarySource: true },
     distinct: ["primarySource"],
   })
 
   // Get unique platforms
-  const platforms = await prisma.newsItem.findMany({
+  type PlatformRecord = { primaryPlatform: string | null }
+  const platforms: PlatformRecord[] = await prisma.newsItem.findMany({
     select: { primaryPlatform: true },
     distinct: ["primaryPlatform"],
   })

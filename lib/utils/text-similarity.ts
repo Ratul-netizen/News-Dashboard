@@ -2,27 +2,53 @@
  * Calculate Jaccard similarity between two strings
  * Used for grouping similar posts into news items
  */
+/**
+ * Calculate similarity using Dice Coefficient on bigrams
+ * Surpasses Jaccard for finding similar text with typos or word order issues.
+ */
 export function calculateJaccardSimilarity(text1: string, text2: string): number {
-  // Normalize and tokenize text
-  const normalize = (text: string): Set<string> => {
-    return new Set(
-      text
-        .toLowerCase()
-        .replace(/[^\w\s]/g, " ")
-        .split(/\s+/)
-        .filter((word) => word.length > 2), // Filter out short words
-    )
+  if (!text1 || !text2) return 0
+
+  // Clean text: lowercase, remove punctuation, reduce whitespace
+  const clean = (text: string) => text.toLowerCase().replace(/[^\w\s]|_/g, "").replace(/\s+/g, " ").trim()
+
+  const s1 = clean(text1)
+  const s2 = clean(text2)
+
+  if (s1 === s2) return 1.0
+  if (s1.length < 2 || s2.length < 2) return 0.0
+
+  // Create bigrams function
+  const getBigrams = (str: string) => {
+    const bigrams = new Map<string, number>()
+    for (let i = 0; i < str.length - 1; i++) {
+      const bigram = str.substring(i, i + 2)
+      bigrams.set(bigram, (bigrams.get(bigram) || 0) + 1)
+    }
+    return bigrams
   }
 
-  const set1 = normalize(text1)
-  const set2 = normalize(text2)
+  const bigrams1 = getBigrams(s1)
+  const bigrams2 = getBigrams(s2)
 
-  // Calculate intersection and union
-  const intersection = new Set([...set1].filter((x) => set2.has(x)))
-  const union = new Set([...set1, ...set2])
+  let intersection = 0
 
-  // Return Jaccard similarity coefficient
-  return union.size === 0 ? 0 : intersection.size / union.size
+  // Calculate size
+  let len1 = 0
+  bigrams1.forEach(count => len1 += count)
+
+  let len2 = 0
+  bigrams2.forEach(count => len2 += count)
+
+  // Calculate intersection count
+  bigrams1.forEach((count, bigram) => {
+    if (bigrams2.has(bigram)) {
+      intersection += Math.min(count, bigrams2.get(bigram)!)
+    }
+  })
+
+  // Dice coefficient: 2 * (intersection) / (size1 + size2)
+  return (2.0 * intersection) / (len1 + len2)
 }
 
 /**

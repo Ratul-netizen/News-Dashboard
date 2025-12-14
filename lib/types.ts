@@ -74,6 +74,7 @@ export interface TrendingPost {
   viralityScore: number
   finalTrendingScore: number
   sentiment: string
+  type?: 'news-item' | 'raw-post'
 }
 
 // Platform mapping for normalization

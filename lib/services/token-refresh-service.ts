@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { PersistentTokenStorage, DatabaseTokenStorage } from './token-storage'
 
-interface TokenData {
+export interface TokenData {
   token: string
   expiresAt: number
   refreshToken?: string

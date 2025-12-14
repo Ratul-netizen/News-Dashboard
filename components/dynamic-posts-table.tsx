@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { TrendingPost } from '@/lib/types'
 import { ColumnConfig, ColumnConfigService } from '@/lib/services/column-config-service'
-import { formatScore, formatViralityScore, getCategoryWeightColor } from '@/lib/utils/score-formatter'
+import { formatScore, formatViralityScore } from '@/lib/utils/score-formatter'
 import { SimplePostAnalysisModal } from '@/components/simple-post-analysis-modal'
 
 interface DynamicPostsTableProps {

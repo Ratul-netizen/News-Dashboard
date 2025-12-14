@@ -8,25 +8,25 @@ import { getTokenService } from "../../../lib/services/token-refresh-service"
 export async function DELETE(request: NextRequest) {
   try {
     console.log("[v0] Clearing all data...")
-    
+
     // Clear all data
     await prisma.post.deleteMany()
     await prisma.newsItem.deleteMany()
     await (prisma as any).source.deleteMany()
     await prisma.dailyAgg.deleteMany()
     await prisma.dataIngestionLog.deleteMany()
-    
+
     console.log("[v0] All data cleared successfully")
-    
+
     return NextResponse.json({
       success: true,
       message: "All data cleared successfully"
     })
   } catch (error) {
     console.error("[v0] Error clearing data:", error)
-    return NextResponse.json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : "Unknown error" 
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
     }, { status: 500 })
   }
 }
@@ -79,15 +79,15 @@ function parseTokenExpiry(token: string): number | null {
 // Enhanced JWT authentication with multiple strategies
 async function performAuthentication(): Promise<string | null> {
   const now = Date.now()
-  
+
   // Rate limiting: don't attempt auth more than once every 30 seconds
   if (now - lastAuthAttempt < AUTH_RETRY_DELAY) {
     console.log("[v0] Auth rate limited, using cached token or waiting...")
     return cachedToken
   }
-  
+
   lastAuthAttempt = now
-  
+
   if (!API_EMAIL || !API_PASSWORD) {
     console.warn("[v0] Authentication credentials not configured")
     return null
@@ -95,13 +95,13 @@ async function performAuthentication(): Promise<string | null> {
 
   try {
     console.log("[v0] Attempting JWT authentication...")
-    
+
     // Strategy 1: Try the configured auth URL
     if (AUTH_URL) {
       const token = await tryAuthenticationEndpoint(AUTH_URL)
       if (token) return token
     }
-    
+
     // Strategy 2: Try common authentication patterns
     const baseUrl = AUTH_URL ? AUTH_URL.split('/api')[0] : 'http://192.168.100.35:9055'
     const authEndpoints = [
@@ -116,27 +116,27 @@ async function performAuthentication(): Promise<string | null> {
       `${baseUrl}/auth/login`,
       `${baseUrl}/auth/token`,
     ]
-    
+
     for (const endpoint of authEndpoints) {
       const token = await tryAuthenticationEndpoint(endpoint)
       if (token) return token
     }
-    
+
     // Strategy 3: Try different request formats
     const alternativeEndpoints = [
       'http://192.168.100.35:9055/api/login',
       'http://192.168.100.35:9055/api/auth/login',
       'http://192.168.100.35:9055/api/token',
     ]
-    
+
     for (const endpoint of alternativeEndpoints) {
       const token = await tryAlternativeAuth(endpoint)
       if (token) return token
     }
-    
+
     console.warn("[v0] All authentication strategies failed")
     return null
-    
+
   } catch (error) {
     console.error("[v0] Authentication error:", error instanceof Error ? error.message : error)
     return null
@@ -161,7 +161,7 @@ function extractToken(data: any, headers?: any): string | null {
     if (authHeader && String(authHeader).toLowerCase().startsWith('bearer ')) {
       return String(authHeader).slice(7).trim()
     }
-  } catch {}
+  } catch { }
   return null
 }
 
@@ -169,12 +169,12 @@ function extractToken(data: any, headers?: any): string | null {
 async function tryAuthenticationEndpoint(endpoint: string): Promise<string | null> {
   try {
     console.log(`[v0] Trying authentication endpoint: ${endpoint}`)
-    
+
     const response = await axios.post(endpoint, {
       email: API_EMAIL,
       username: API_EMAIL,
       password: API_PASSWORD,
-    }, { 
+    }, {
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
@@ -184,17 +184,17 @@ async function tryAuthenticationEndpoint(endpoint: string): Promise<string | nul
 
     const data = response.data || {}
     const token = extractToken(data, response.headers)
-    
+
     if (token) {
       console.log(`[v0] ✅ Authentication successful with endpoint: ${endpoint}`)
       cachedToken = token
       tokenExpiry = parseTokenExpiry(token)
       return token
     }
-    
+
     console.log(`[v0] ❌ Endpoint ${endpoint} returned no token. Response keys:`, Object.keys(data))
     return null
-    
+
   } catch (error: any) {
     console.log(`[v0] ❌ Endpoint ${endpoint} failed:`, error.response?.status || error.message)
     return null
@@ -213,12 +213,12 @@ async function tryAlternativeAuth(endpoint: string): Promise<string | null> {
     // Alternative format 3
     { login: API_EMAIL, password: API_PASSWORD },
   ]
-  
+
   for (const authData of authFormats) {
     try {
       console.log(`[v0] Trying alternative auth format on ${endpoint}`)
-      
-      const response = await axios.post(endpoint, authData, { 
+
+      const response = await axios.post(endpoint, authData, {
         timeout: 30000,
         headers: {
           'Content-Type': 'application/json',
@@ -228,7 +228,7 @@ async function tryAlternativeAuth(endpoint: string): Promise<string | null> {
 
       const data = response.data || {}
       const token = extractToken(data, response.headers)
-      
+
       if (token) {
         console.log(`[v0] ✅ Alternative auth successful with endpoint: ${endpoint}`)
         cachedToken = token
@@ -240,7 +240,7 @@ async function tryAlternativeAuth(endpoint: string): Promise<string | null> {
       continue
     }
   }
-  
+
   // Final fallback: form-encoded credentials (common in some auth servers)
   try {
     console.log(`[v0] Trying form-encoded auth on ${endpoint}`)
@@ -265,7 +265,7 @@ async function tryAlternativeAuth(endpoint: string): Promise<string | null> {
   } catch (err: any) {
     console.log(`[v0] ❌ Form-encoded auth failed for ${endpoint}:`, err.response?.status || err.message)
   }
-  
+
   return null
 }
 
@@ -298,7 +298,7 @@ async function getExternalApiAuthHeaders(): Promise<Record<string, string>> {
   // Need to authenticate
   console.log("[v0] No valid cached token, performing authentication...")
   const token = await performAuthentication()
-  
+
   if (token) {
     console.log("[v0] ✅ Authentication successful, using new token")
     return { Authorization: `Bearer ${token}` }
@@ -332,13 +332,13 @@ async function getExternalApiAuthHeadersForceLogin(): Promise<Record<string, str
   // Clear cached token to force fresh authentication
   cachedToken = null
   tokenExpiry = null
-  
+
   const token = await performAuthentication()
   if (token) {
     console.log("[v0] ✅ Force login successful")
     return { Authorization: `Bearer ${token}` }
   }
-  
+
   console.warn("[v0] ❌ Force login failed")
   return {}
 }
@@ -354,7 +354,7 @@ async function getWithAuth(url: string, timeoutMs: number) {
   } catch (err: any) {
     const status = err?.response?.status
     console.log(`[v0] Request failed with status: ${status}`)
-    
+
     if (status === 401) {
       console.log(`[v0] 401 Unauthorized, attempting fresh authentication...`)
       const retryHeaders = await getExternalApiAuthHeadersForceLogin()
@@ -363,7 +363,7 @@ async function getWithAuth(url: string, timeoutMs: number) {
         return await axios.get(url, { timeout: timeoutMs, headers: retryHeaders })
       }
     }
-    
+
     // If authentication fails, try without auth headers (some APIs might work without auth)
     if (status === 401 || status === 403) {
       console.log(`[v0] Trying request without authentication...`)
@@ -373,7 +373,7 @@ async function getWithAuth(url: string, timeoutMs: number) {
         console.log(`[v0] Fallback request also failed: ${fallbackErr.response?.status}`)
       }
     }
-    
+
     throw err
   }
 }
@@ -486,72 +486,91 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Starting data ingestion process...")
 
     let allPosts: any[] = []
-    let currentPage = 1
-    const pageSize = 1000 // Maximum page size
-    let totalPages: number | null = null
+    // Platforms to fetch posts for
+    const postPlatforms = ['F', 'I', 'X', 'Y', 'T']
 
-    // Fetch all pages of data (robust loop that relies on total_pages if present, otherwise continues until empty page)
-    // Also supports APIs that return either `result` or `results` arrays
-    while (true) {
-      try {
-        console.log(`[v0] Fetching page ${currentPage}...`)
-        
-        const response = await getWithAuth(buildPagedUrl(API_URL, currentPage, pageSize), 30000)
+    for (const platform of postPlatforms) {
+      console.log(`[v0] Fetching posts for platform: ${platform}`)
+      let currentPage = 1
+      const pageSize = 1000 // Maximum page size
+      let totalPages: number | null = null
 
-        const data = response.data
-        
-        const pageItems: any[] = Array.isArray(data.result)
-          ? data.result
-          : Array.isArray(data.results)
-          ? data.results
-          : []
+      // Fetch all pages of data for this platform
+      while (true) {
+        try {
+          console.log(`[v0] Fetching posts page ${currentPage} for platform ${platform}...`)
 
-        if (pageItems.length === 0) {
-          console.log(`[v0] Page ${currentPage} returned 0 items; assuming end of data.`)
+          // Construct URL robustly using URL object
+          const urlObj = new URL(API_URL)
+          urlObj.searchParams.set("page", String(currentPage))
+          urlObj.searchParams.set("page_size", String(pageSize))
+          urlObj.searchParams.set("platform", platform)
+
+          const url = urlObj.toString()
+
+          const response = await getWithAuth(url, 30000)
+
+          const data = response.data
+
+          const pageItems: any[] = Array.isArray(data.result)
+            ? data.result
+            : Array.isArray(data.results)
+              ? data.results
+              : []
+
+          if (pageItems.length === 0) {
+            console.log(`[v0] Posts page ${currentPage} for platform ${platform} returned 0 items; moving to next platform.`)
+            break
+          }
+
+          // Inject platform into the post objects since the API might not return it
+          const postsWithPlatform = pageItems.map(post => ({
+            ...post,
+            platform: platform
+          }))
+
+          allPosts = allPosts.concat(postsWithPlatform)
+          console.log(`[v0] Fetched ${pageItems.length} posts from page ${currentPage} for platform ${platform}`)
+
+          // Determine total pages if provided
+          if (typeof data.total_pages === 'number') {
+            totalPages = data.total_pages
+          }
+
+          // Debug: Log pagination info
+          console.log(`[v0] Page ${currentPage} - current_page: ${data.current_page}, total_pages: ${data.total_pages}, has_next: ${Boolean(data.next)}`)
+
+          // Force stop after 3 pages since API lies about pagination (keeping original logic)
+          if (currentPage >= 3) {
+            console.log(`[v0] Force stopping at page ${currentPage} (API limit reached)`)
+            break
+          }
+
+          // Next page condition: prefer numerical paging info when available
+          const hasMoreByNumbers = typeof data.current_page === 'number' && typeof data.total_pages === 'number'
+            ? data.current_page < data.total_pages
+            : null
+
+          // Only use link-based pagination if we don't have numerical info
+          const hasMoreByLink = hasMoreByNumbers === null && Boolean(data.next)
+
+          console.log(`[v0] hasMoreByNumbers: ${hasMoreByNumbers}, hasMoreByLink: ${hasMoreByLink}`)
+
+          if (hasMoreByNumbers === true || hasMoreByLink) {
+            currentPage++
+            console.log(`[v0] Continuing to page ${currentPage} for platform ${platform}`)
+          } else {
+            console.log(`[v0] Stopping pagination at page ${currentPage} for platform ${platform}`)
+            break
+          }
+
+          // Add a small delay between requests to be respectful
+          await new Promise(resolve => setTimeout(resolve, 100))
+
+        } catch (error) {
+          console.error(`[v0] Error fetching posts page ${currentPage} for platform ${platform}:`, error)
           break
         }
-
-        allPosts = allPosts.concat(pageItems)
-        console.log(`[v0] Fetched ${pageItems.length} posts from page ${currentPage}`)
-
-        // Determine total pages if provided
-        if (typeof data.total_pages === 'number') {
-          totalPages = data.total_pages
-        }
-
-        // Debug: Log pagination info
-        console.log(`[v0] Page ${currentPage} - current_page: ${data.current_page}, total_pages: ${data.total_pages}, has_next: ${Boolean(data.next)}`)
-        
-        // Force stop after 3 pages since API lies about pagination
-        if (currentPage >= 3) {
-          console.log(`[v0] Force stopping at page ${currentPage} (API limit reached)`)
-          break
-        }
-        
-        // Next page condition: prefer numerical paging info when available
-        const hasMoreByNumbers = typeof data.current_page === 'number' && typeof data.total_pages === 'number'
-          ? data.current_page < data.total_pages
-          : null
-
-        // Only use link-based pagination if we don't have numerical info
-        const hasMoreByLink = hasMoreByNumbers === null && Boolean(data.next)
-
-        console.log(`[v0] hasMoreByNumbers: ${hasMoreByNumbers}, hasMoreByLink: ${hasMoreByLink}`)
-
-        if (hasMoreByNumbers === true || hasMoreByLink) {
-          currentPage++
-          console.log(`[v0] Continuing to page ${currentPage}`)
-        } else {
-          console.log(`[v0] Stopping pagination at page ${currentPage}`)
-          break
-        }
-
-        // Add a small delay between requests to be respectful
-        await new Promise(resolve => setTimeout(resolve, 100))
-        
-      } catch (error) {
-        console.error(`[v0] Error fetching page ${currentPage}:`, error)
-        break
       }
     }
 
@@ -560,50 +579,71 @@ export async function POST(request: NextRequest) {
     // Fetch sources data
     console.log("[v0] Fetching sources data...")
     let allSources: any[] = []
-    let currentSourcePage = 1
-    const sourcePageSize = 1000
 
-    while (true) {
-      try {
-        console.log(`[v0] Fetching sources page ${currentSourcePage}...`)
-        
-        const sourcesResponse = await getWithAuth(buildPagedUrl(SOURCES_API_URL, currentSourcePage, sourcePageSize), 30000)
+    // Platforms to fetch sources for
+    const platforms = ['F', 'I', 'X', 'Y', 'T']
 
-        const sourcesData = sourcesResponse.data
-        
-        const pageSources: any[] = Array.isArray(sourcesData.result)
-          ? sourcesData.result
-          : Array.isArray(sourcesData.results)
-          ? sourcesData.results
-          : []
+    for (const platform of platforms) {
+      console.log(`[v0] Fetching sources for platform: ${platform}`)
+      let currentSourcePage = 1
+      const sourcePageSize = 1000
 
-        if (pageSources.length === 0) {
-          console.log(`[v0] Sources page ${currentSourcePage} returned 0 items; assuming end of data.`)
-          break
-        }
+      while (true) {
+        try {
+          console.log(`[v0] Fetching sources page ${currentSourcePage} for platform ${platform}...`)
 
-        allSources = allSources.concat(pageSources)
-        console.log(`[v0] Fetched ${pageSources.length} sources from page ${currentSourcePage}`)
+          // Construct URL robustly using URL object
+          const urlObj = new URL(SOURCES_API_URL)
+          urlObj.searchParams.set("page", String(currentSourcePage))
+          urlObj.searchParams.set("page_size", String(sourcePageSize))
+          urlObj.searchParams.set("platform", platform)
 
-        // Check if there are more pages
-        if (typeof sourcesData.current_page === 'number' && typeof sourcesData.total_pages === 'number') {
-          if (sourcesData.current_page < sourcesData.total_pages) {
+          const url = urlObj.toString()
+
+          const sourcesResponse = await getWithAuth(url, 30000)
+
+          const sourcesData = sourcesResponse.data
+
+          const pageSources: any[] = Array.isArray(sourcesData.result)
+            ? sourcesData.result
+            : Array.isArray(sourcesData.results)
+              ? sourcesData.results
+              : []
+
+          if (pageSources.length === 0) {
+            console.log(`[v0] Sources page ${currentSourcePage} for platform ${platform} returned 0 items; moving to next platform.`)
+            break
+          }
+
+          // Inject platform into the source objects since the API might not return it
+          const sourcesWithPlatform = pageSources.map(source => ({
+            ...source,
+            platform: platform
+          }))
+
+          allSources = allSources.concat(sourcesWithPlatform)
+          console.log(`[v0] Fetched ${pageSources.length} sources from page ${currentSourcePage} for platform ${platform}`)
+
+          // Check if there are more pages
+          if (typeof sourcesData.current_page === 'number' && typeof sourcesData.total_pages === 'number') {
+            if (sourcesData.current_page < sourcesData.total_pages) {
+              currentSourcePage++
+            } else {
+              break
+            }
+          } else if (sourcesData.next) {
             currentSourcePage++
           } else {
             break
           }
-        } else if (sourcesData.next) {
-          currentSourcePage++
-        } else {
+
+          // Add a small delay between requests
+          await new Promise(resolve => setTimeout(resolve, 100))
+
+        } catch (error) {
+          console.error(`[v0] Error fetching sources page ${currentSourcePage} for platform ${platform}:`, error)
           break
         }
-
-        // Add a small delay between requests
-        await new Promise(resolve => setTimeout(resolve, 100))
-        
-      } catch (error) {
-        console.error(`[v0] Error fetching sources page ${currentSourcePage}:`, error)
-        break
       }
     }
 
@@ -612,7 +652,7 @@ export async function POST(request: NextRequest) {
     // Transform external API format to internal format
     const transformedPosts = allPosts.map(transformExternalPost)
     const transformedSources = allSources.map(transformExternalSource)
-    
+
     // Debug: Log a few transformed posts to see the structure
     console.log("[v0] Sample transformed post:", JSON.stringify(transformedPosts[0], null, 2))
 
@@ -625,7 +665,7 @@ export async function POST(request: NextRequest) {
     for (const apiPost of transformedPosts) {
       try {
         console.log(`[v0] Processing post: ${apiPost.post_id} - ${apiPost.post_text.substring(0, 50)}...`)
-        
+
         // Validate required fields
         if (!apiPost.post_id) {
           console.log(`[v0] Skipping post with missing post_id`)
@@ -636,17 +676,23 @@ export async function POST(request: NextRequest) {
         if (!apiPost.post_text || apiPost.post_text.trim().length === 0) {
           apiPost.post_text = `[No text] ${apiPost.source || ''}`.trim()
         }
+        // Ensure postId is always a string
+        const postIdString = String(apiPost.post_id)
 
         // Check if post already exists
-        const existingPost = await prisma.post.findUnique({
-          where: { postId: apiPost.post_id },
+        const existingPost = await prisma.post.findFirst({
+          where: {
+            postId: postIdString,
+          },
         })
 
         if (existingPost) {
-          console.log(`[v0] Updating existing post: ${apiPost.post_id}`)
+          console.log(`[v0] Updating existing post: ${postIdString}`)
           // Update existing post
           await prisma.post.update({
-            where: { postId: apiPost.post_id },
+            where: {
+              id: existingPost.id,
+            },
             data: {
               postText: apiPost.post_text,
               postDate: apiPost.post_date,
@@ -663,11 +709,11 @@ export async function POST(request: NextRequest) {
             },
           })
         } else {
-          console.log(`[v0] Creating new post: ${apiPost.post_id}`)
+          console.log(`[v0] Creating new post: ${postIdString}`)
           // Create new post
           await prisma.post.create({
             data: {
-              postId: apiPost.post_id,
+              postId: postIdString,
               postText: apiPost.post_text,
               postDate: apiPost.post_date,
               postLink: apiPost.post_link,
@@ -691,7 +737,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error(`[v0] Error processing post ${apiPost.post_id}:`, error)
         console.error(`[v0] Post data:`, JSON.stringify(apiPost, null, 2))
-        
+
         // Check if it's a unique constraint error
         if (error instanceof Error && error.message && error.message.includes('Unique constraint')) {
           console.error(`[v0] Unique constraint violation for post ${apiPost.post_id}`)
@@ -704,7 +750,7 @@ export async function POST(request: NextRequest) {
     for (const apiSource of transformedSources) {
       try {
         console.log(`[v0] Processing source: ${apiSource.source_id} - ${apiSource.name}`)
-        
+
         // Validate required fields
         if (!apiSource.source_id) {
           console.log(`[v0] Skipping source with missing source_id`)
@@ -759,13 +805,13 @@ export async function POST(request: NextRequest) {
 
     // Create news items from posts
     console.log("[v0] Creating news items...")
-    
+
     // Get all posts for analysis
     const dbPosts = await prisma.post.findMany({
       orderBy: { postDate: 'desc' },
       take: 1000, // Limit to recent posts for performance
     })
-    
+
     // Group posts by content similarity and source/category
     const newsGroups: Array<{
       baseKey: string
@@ -793,15 +839,15 @@ export async function POST(request: NextRequest) {
       firstPostDate: Date
       lastPostDate: Date
     }> = []
-    
+
     // Process each post to find similar content
     for (const post of dbPosts) {
       let addedToGroup = false
-      
+
       // Check if post can be added to existing group
       for (const group of newsGroups) {
         const similarity = calculateJaccardSimilarity(post.postText, group.posts[0].postText)
-        
+
         // If similar content and same category, add to group
         if (similarity >= 0.3 && (post.category || 'uncategorized') === group.category) {
           group.posts.push({
@@ -830,7 +876,7 @@ export async function POST(request: NextRequest) {
           break
         }
       }
-      
+
       // If no similar group found, create new group
       if (!addedToGroup) {
         const baseKey = generateBaseKey(post.postText)
@@ -968,9 +1014,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error("[v0] Data ingestion failed:", error)
-    return NextResponse.json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : "Unknown error" 
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
     }, { status: 500 })
   }
 }

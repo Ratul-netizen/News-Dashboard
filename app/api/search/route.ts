@@ -50,14 +50,15 @@ export async function GET(request: NextRequest) {
 
     // Initialize scoring service
     const scoringService = new ContentScoringService()
+    type SearchResult = typeof searchResults[number]
     
     // Calculate max trending score for scaling
     const maxTrendingScore = searchResults.length > 0 
-      ? Math.max(...searchResults.map(r => r.avgTrendingScore || 0))
+      ? Math.max(...searchResults.map((result: SearchResult) => result.avgTrendingScore || 0))
       : 1
 
     // Transform to TrendingPost format with advanced scoring
-    const formattedResults: TrendingPost[] = searchResults.map((item) => {
+    const formattedResults: TrendingPost[] = searchResults.map((item: SearchResult) => {
       const primaryPost = item.posts[0]
       const postAnalysis: PostAnalysis | null = item.postAnalysisJson ? JSON.parse(item.postAnalysisJson) : null
 
@@ -143,7 +144,8 @@ export async function GET(request: NextRequest) {
 async function getSearchSuggestions(query: string): Promise<string[]> {
   try {
     // Get related categories
-    const categories = await prisma.newsItem.findMany({
+    type CategoryRecord = { category: string | null }
+    const categories: CategoryRecord[] = await prisma.newsItem.findMany({
       where: {
         category: {
           contains: query,
@@ -155,7 +157,8 @@ async function getSearchSuggestions(query: string): Promise<string[]> {
     })
 
     // Get related sources
-    const sources = await prisma.newsItem.findMany({
+    type SourceRecord = { primarySource: string | null }
+    const sources: SourceRecord[] = await prisma.newsItem.findMany({
       where: {
         primarySource: {
           contains: query,
@@ -167,8 +170,8 @@ async function getSearchSuggestions(query: string): Promise<string[]> {
     })
 
     const suggestions = [
-      ...categories.map((c) => c.category).filter((c): c is string => c !== null),
-      ...sources.map((s) => s.primarySource).filter((s): s is string => s !== null)
+      ...categories.map((c: CategoryRecord) => c.category).filter((c): c is string => c !== null),
+      ...sources.map((s: SourceRecord) => s.primarySource).filter((s): s is string => s !== null)
     ]
 
     return [...new Set(suggestions)].slice(0, 8)

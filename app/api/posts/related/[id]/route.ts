@@ -36,13 +36,16 @@ export async function GET(
     })
 
     // Calculate similarity scores and filter
-    const relatedPosts = similarPosts
-      .map(post => ({
+    type SimilarPost = typeof similarPosts[number]
+    type PostWithSimilarity = SimilarPost & { similarity: number }
+
+    const relatedPosts: PostWithSimilarity[] = similarPosts
+      .map((post: SimilarPost) => ({
         ...post,
         similarity: calculateJaccardSimilarity(targetPost.postText, post.postText),
       }))
-      .filter(post => post.similarity >= 0.2) // Minimum similarity threshold
-      .sort((a, b) => b.similarity - a.similarity)
+      .filter((post: PostWithSimilarity) => post.similarity >= 0.2) // Minimum similarity threshold
+      .sort((a: PostWithSimilarity, b: PostWithSimilarity) => b.similarity - a.similarity)
       .slice(0, 10) // Top 10 most similar
 
     // Get unique sources and platforms from related posts
