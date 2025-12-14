@@ -68,9 +68,16 @@ export async function GET(request: NextRequest) {
 
         // Filter by text similarity in memory (simple inclusion)
         const trulySimilarPosts = similarPosts.filter(p => {
-            // Check if at least one meaningful keyword matches
-            // Or calculate Jaccard index
-            return calculateJaccardSimilarity(post.postText, p.postText) > 0.2
+            // 1. Length ratio check: prevent matching if sizes differ drastically (> 50%)
+            const len1 = post.postText.length
+            const len2 = p.postText.length
+            const ratio = len1 > len2 ? len2 / len1 : len1 / len2
+            if (ratio < 0.5) return false
+
+            // 2. Strict Dice Coefficient Threshold (0.45)
+            // Debug tests showed 0.21 for dissimilar, 0.84 for similar.
+            // 0.45 is a safe middle ground.
+            return calculateJaccardSimilarity(post.postText, p.postText) > 0.45
         })
 
         // Construct a "Virtual Group"

@@ -9,8 +9,9 @@
 export function calculateJaccardSimilarity(text1: string, text2: string): number {
   if (!text1 || !text2) return 0
 
-  // Clean text: lowercase, remove punctuation, reduce whitespace
-  const clean = (text: string) => text.toLowerCase().replace(/[^\w\s]|_/g, "").replace(/\s+/g, " ").trim()
+  // Clean text: lowercase, remove punctuation (keeping unicode letters/marks/numbers), reduce whitespace
+  // Using \p{L} for letters, \p{M} for marks (vowels), \p{N} for numbers
+  const clean = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim()
 
   const s1 = clean(text1)
   const s2 = clean(text2)

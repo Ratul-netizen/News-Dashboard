@@ -31,11 +31,11 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.35:9051/api/posts/"
-const SOURCES_API_URL = process.env.EXTERNAL_SOURCES_API_URL || "http://192.168.100.35:9051/api/sources/"
+const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.36:9051/api/posts/"
+const SOURCES_API_URL = process.env.EXTERNAL_SOURCES_API_URL || "http://192.168.100.36:9051/api/sources/"
 const AUTH_URL = process.env.EXTERNAL_AUTH_URL
-const API_EMAIL = process.env.EXTERNAL_API_EMAIL
-const API_PASSWORD = process.env.EXTERNAL_API_PASSWORD
+const API_EMAIL = process.env.EXTERNAL_API_EMAIL || "cttc_admin@technometrics.net"
+const API_PASSWORD = process.env.EXTERNAL_API_PASSWORD || "Tech_@cttc"
 const STATIC_API_TOKEN = process.env.EXTERNAL_API_TOKEN
 const AUTH_SCHEME_OVERRIDE = process.env.EXTERNAL_AUTH_SCHEME // e.g. "Token" or "Bearer"
 
@@ -103,7 +103,7 @@ async function performAuthentication(): Promise<string | null> {
     }
 
     // Strategy 2: Try common authentication patterns
-    const baseUrl = AUTH_URL ? AUTH_URL.split('/api')[0] : 'http://192.168.100.35:9055'
+    const baseUrl = AUTH_URL ? AUTH_URL.split('/api')[0] : 'http://192.168.100.36:9053'
     const authEndpoints = [
       `${baseUrl}/api/login`,
       `${baseUrl}/api/auth/login`,
@@ -124,9 +124,9 @@ async function performAuthentication(): Promise<string | null> {
 
     // Strategy 3: Try different request formats
     const alternativeEndpoints = [
-      'http://192.168.100.35:9055/api/login',
-      'http://192.168.100.35:9055/api/auth/login',
-      'http://192.168.100.35:9055/api/token',
+      'http://192.168.100.36:9053/api/login',
+      'http://192.168.100.36:9053/api/auth/login',
+      'http://192.168.100.36:9053/api/token',
     ]
 
     for (const endpoint of alternativeEndpoints) {
@@ -848,8 +848,12 @@ export async function POST(request: NextRequest) {
       for (const group of newsGroups) {
         const similarity = calculateJaccardSimilarity(post.postText, group.posts[0].postText)
 
-        // If similar content and same category, add to group
-        if (similarity >= 0.3 && (post.category || 'uncategorized') === group.category) {
+        const len1 = post.postText.length
+        const len2 = group.posts[0].postText.length
+        const ratio = len1 > len2 ? len2 / len1 : len1 / len2
+
+        // If similar content (threshold 0.45) and similar length (>0.5 ratio) and same category, add to group
+        if (ratio >= 0.5 && similarity >= 0.45 && (post.category || 'uncategorized') === group.category) {
           group.posts.push({
             id: post.id,
             postText: post.postText,
