@@ -9,9 +9,31 @@
 export function calculateJaccardSimilarity(text1: string, text2: string): number {
   if (!text1 || !text2) return 0
 
-  // Clean text: lowercase, remove punctuation (keeping unicode letters/marks/numbers), reduce whitespace
-  // Using \p{L} for letters, \p{M} for marks (vowels), \p{N} for numbers
-  const clean = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim()
+  // Enhanced stop words list for better similarity matching
+  const stopWords = new Set([
+    'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+    'from', 'as', 'is', 'was', 'are', 'were', 'be', 'been', 'being', 'have', 'has',
+    'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+    'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it',
+    'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'a', 'an',
+    'said', 'says', 'say', 'report', 'reports', 'news', 'story', 'article', 'according',
+    'just', 'more', 'most', 'some', 'many', 'much', 'very', 'really', 'also', 'here',
+    'there', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then',
+    'once', 'time', 'times', 'new', 'old', 'first', 'last', 'long', 'good', 'best',
+    'better', 'bad', 'worse', 'worst', 'big', 'large', 'small', 'little', 'great'
+  ])
+
+  // Enhanced text cleaning: lowercase, remove punctuation, remove stop words, reduce whitespace
+  const clean = (text: string) => {
+    return text.toLowerCase()
+      .replace(/[^\p{L}\p{M}\p{N}\s]/gu, "") // Remove punctuation
+      .replace(/\s+/g, " ") // Reduce whitespace
+      .trim()
+      .split(/\s+/) // Split into words
+      .filter(word => word.length > 2) // Filter very short words
+      .filter(word => !stopWords.has(word)) // Remove stop words
+      .join(" ") // Rejoin
+  }
 
   const s1 = clean(text1)
   const s2 = clean(text2)

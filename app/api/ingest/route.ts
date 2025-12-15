@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import "../../../lib/services/token-service-init"
 import axios from "axios"
 import { prisma } from "../../../lib/db"
 import { calculateJaccardSimilarity, generateBaseKey } from "../../../lib/utils/text-similarity"
@@ -33,6 +34,7 @@ export async function DELETE(request: NextRequest) {
 
 const API_URL = process.env.EXTERNAL_API_URL || "http://192.168.100.36:9051/api/posts/"
 const SOURCES_API_URL = process.env.EXTERNAL_SOURCES_API_URL || "http://192.168.100.36:9051/api/sources/"
+const PERSONS_API_URL = process.env.EXTERNAL_PERSONS_API_URL || "http://192.168.100.36:9051/api/persons/"
 const AUTH_URL = process.env.EXTERNAL_AUTH_URL
 const API_EMAIL = process.env.EXTERNAL_API_EMAIL || "cttc_admin@technometrics.net"
 const API_PASSWORD = process.env.EXTERNAL_API_PASSWORD || "Tech_@cttc"
@@ -88,13 +90,34 @@ async function performAuthentication(): Promise<string | null> {
 
   lastAuthAttempt = now
 
+  // Check if we can initialize the token service on the fly
+  const currentTokenService = getTokenService()
+  if (!currentTokenService && (API_EMAIL && API_PASSWORD && AUTH_URL)) {
+    console.log("[v0] Token service not initialized, attempting lazy initialization...")
+    try {
+      const { initializeTokenService } = await import("../../../lib/services/token-refresh-service")
+      initializeTokenService({
+        authUrl: AUTH_URL,
+        email: API_EMAIL,
+        password: API_PASSWORD,
+      }, false)
+      const newService = getTokenService()
+      if (newService) {
+        console.log("[v0] Lazy initialization successful, using token service")
+        return await newService.getAccessToken()
+      }
+    } catch (e) {
+      console.error("[v0] Lazy initialization failed:", e)
+    }
+  }
+
   if (!API_EMAIL || !API_PASSWORD) {
     console.warn("[v0] Authentication credentials not configured")
     return null
   }
 
   try {
-    console.log("[v0] Attempting JWT authentication...")
+    console.log("[v0] Attempting legacy JWT authentication...")
 
     // Strategy 1: Try the configured auth URL
     if (AUTH_URL) {
@@ -103,18 +126,12 @@ async function performAuthentication(): Promise<string | null> {
     }
 
     // Strategy 2: Try common authentication patterns
-    const baseUrl = AUTH_URL ? AUTH_URL.split('/api')[0] : 'http://192.168.100.36:9053'
+    const baseUrl = AUTH_URL ? AUTH_URL.split('/api')[0] : 'http://192.168.100.36:9051'
     const authEndpoints = [
       `${baseUrl}/api/login`,
       `${baseUrl}/api/auth/login`,
       `${baseUrl}/api/token`,
       `${baseUrl}/api/authenticate`,
-      `${baseUrl}/api/auth/token`,
-      `${baseUrl}/api/auth/authenticate`,
-      `${baseUrl}/audit/user/login`,
-      `${baseUrl}/audit/user/authenticate`,
-      `${baseUrl}/auth/login`,
-      `${baseUrl}/auth/token`,
     ]
 
     for (const endpoint of authEndpoints) {
@@ -122,19 +139,7 @@ async function performAuthentication(): Promise<string | null> {
       if (token) return token
     }
 
-    // Strategy 3: Try different request formats
-    const alternativeEndpoints = [
-      'http://192.168.100.36:9053/api/login',
-      'http://192.168.100.36:9053/api/auth/login',
-      'http://192.168.100.36:9053/api/token',
-    ]
-
-    for (const endpoint of alternativeEndpoints) {
-      const token = await tryAlternativeAuth(endpoint)
-      if (token) return token
-    }
-
-    console.warn("[v0] All authentication strategies failed")
+    console.warn("[v0] All legacy authentication strategies failed")
     return null
 
   } catch (error) {
@@ -487,7 +492,7 @@ export async function POST(request: NextRequest) {
 
     let allPosts: any[] = []
     // Platforms to fetch posts for
-    const postPlatforms = ['F', 'I', 'X', 'Y', 'T']
+    const postPlatforms = ['F', 'X', 'Y', 'T']
 
     for (const platform of postPlatforms) {
       console.log(`[v0] Fetching posts for platform: ${platform}`)
@@ -540,8 +545,8 @@ export async function POST(request: NextRequest) {
           // Debug: Log pagination info
           console.log(`[v0] Page ${currentPage} - current_page: ${data.current_page}, total_pages: ${data.total_pages}, has_next: ${Boolean(data.next)}`)
 
-          // Force stop after 3 pages since API lies about pagination (keeping original logic)
-          if (currentPage >= 3) {
+          // Force stop after 10 pages (increased from 3)
+          if (currentPage >= 10) {
             console.log(`[v0] Force stopping at page ${currentPage} (API limit reached)`)
             break
           }
@@ -581,7 +586,7 @@ export async function POST(request: NextRequest) {
     let allSources: any[] = []
 
     // Platforms to fetch sources for
-    const platforms = ['F', 'I', 'X', 'Y', 'T']
+    const platforms = ['F', 'X', 'Y', 'T']
 
     for (const platform of platforms) {
       console.log(`[v0] Fetching sources for platform: ${platform}`)
@@ -646,6 +651,60 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    console.log(`[v0] Total sources fetched: ${allSources.length}`)
+
+    // Fetch persons data - DISABLED (not needed, was causing performance issues)
+    /*
+    console.log("[v0] Fetching persons data...")
+    let allPersons: any[] = []
+    let currentPersonPage = 1
+    const personPageSize = 1000
+
+    while (true) {
+      try {
+        console.log(`[v0] Fetching persons page ${currentPersonPage}...`)
+        const urlObj = new URL(PERSONS_API_URL)
+        urlObj.searchParams.set("page", String(currentPersonPage))
+        urlObj.searchParams.set("page_size", String(personPageSize))
+
+        const url = urlObj.toString()
+        const response = await getWithAuth(url, 30000)
+        const data = response.data
+
+        // API returns 'users' array
+        const pagePersons = Array.isArray(data.users) ? data.users : []
+
+        if (pagePersons.length === 0) {
+          console.log(`[v0] Persons page ${currentPersonPage} returned 0 items.`)
+          break
+        }
+
+        allPersons = allPersons.concat(pagePersons)
+        console.log(`[v0] Fetched ${pagePersons.length} persons from page ${currentPersonPage}`)
+
+        // Pagination logic
+        if (typeof data.current_page === 'number' && typeof data.total_pages === 'number') {
+          if (data.current_page < data.total_pages) {
+            currentPersonPage++
+          } else {
+            break
+          }
+        } else if (data.next) {
+          currentPersonPage++
+        } else {
+          break
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100))
+      } catch (error) {
+        console.error(`[v0] Error fetching persons page ${currentPersonPage}:`, error)
+        break
+      }
+    }
+    console.log(`[v0] Total persons fetched: ${allPersons.length}`)
+    */
+    console.log("[v0] Persons fetching disabled (not needed)")
 
     console.log(`[v0] Total sources fetched: ${allSources.length}`)
 
@@ -802,6 +861,47 @@ export async function POST(request: NextRequest) {
         console.error(`[v0] Source data:`, JSON.stringify(apiSource, null, 2))
       }
     }
+
+    // Process persons - DISABLED (persons fetching is disabled)
+    /*
+    console.log("[v0] Processing persons...")
+    let personsProcessed = 0
+    for (const person of allPersons) {
+      try {
+        if (!person.id) continue
+
+        const personData = {
+          externalId: String(person.id),
+          name: person.name || "Unknown",
+          profileUrl: person.profile_url,
+          proPic: person.pro_pic,
+          commentTime: person.comment_time ? new Date(person.comment_time) : null,
+          mostTalkedTopic: person.most_talked_topic,
+          sentiment: person.sentiment,
+          count: typeof person.count === 'number' ? person.count : 0,
+        }
+
+        await (prisma as any).person.upsert({
+          where: { externalId: personData.externalId },
+          update: {
+            name: personData.name,
+            profileUrl: personData.profileUrl,
+            proPic: personData.proPic,
+            commentTime: personData.commentTime,
+            mostTalkedTopic: personData.mostTalkedTopic,
+            sentiment: personData.sentiment,
+            count: personData.count,
+          },
+          create: personData
+        })
+        personsProcessed++
+      } catch (error) {
+        console.error(`[v0] Error processing person ${person.id}:`, error)
+      }
+    }
+    console.log(`[v0] Successfully processed ${personsProcessed} persons`)
+    */
+    console.log("[v0] Persons processing disabled (not needed)")
 
     // Create news items from posts
     console.log("[v0] Creating news items...")

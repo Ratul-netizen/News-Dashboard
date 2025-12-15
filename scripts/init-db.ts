@@ -38,7 +38,7 @@ async function initializeTokenRefreshSystem() {
     console.log('🔐 Initializing automatic token refresh system...')
     
     const config = {
-      authUrl: process.env.EXTERNAL_AUTH_URL || 'http://192.168.100.35:9055/api/login/',
+      authUrl: process.env.EXTERNAL_AUTH_URL || 'http://192.168.100.36:9053/auth/login',
       email: process.env.EXTERNAL_API_EMAIL || '',
       password: process.env.EXTERNAL_API_PASSWORD || '',
       clientId: process.env.OAUTH_CLIENT_ID,

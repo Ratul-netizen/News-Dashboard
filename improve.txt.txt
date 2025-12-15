@@ -1,0 +1,174 @@
+---
+
+# 🔧 TASK PROMPT FOR CLAUDE
+
+**(Context Vocabulary Enrichment – Bengali News, Deterministic System)**
+
+You are working on an **already-implemented, event-centric Bengali news grouping system**.
+The system does **NOT** use any LLM at runtime.
+
+Your task is to **ENRICH existing incident contexts and vocabularies**, not redesign the architecture.
+
+All logic must remain:
+
+* Deterministic
+* Explainable
+* Bangla-optimized
+* Compatible with the current codebase
+
+---
+
+## 🎯 Goal
+
+Improve **context classification accuracy** by enriching **Bengali structural vocabularies** for crime and related news, using **real Bengali news language**, while **avoiding context bleed and false positives**.
+
+---
+
+## ✅ What Already Exists (DO NOT REMOVE)
+
+* Anchor Entity Priority (Person → Location → Organization → Object)
+* Conditional Hard Gate (Person = strict, others = soft)
+* Context buckets (medical, shooting_attack, investigation, war, accident, protest, political, etc.)
+* TF-IDF + n-gram similarity
+* Event-chain logic
+* Confidence scoring (55 / 30 / 15)
+
+Your task is **ONLY** to enrich vocabularies and scoring logic.
+
+---
+
+## 🔑 VERY IMPORTANT RULES (MANDATORY)
+
+1. **Do NOT add flat keyword lists**
+2. **Do NOT treat generic words as core**
+
+   * Words like: `নিহত`, `আহত`, `ক্ষতিগ্রস্ত`, `হামলা`
+   * These must be **weak indicators only**
+3. **Phrase-level keywords must be prioritized**
+4. **Negative keywords must be added per context**
+5. **No LLM usage at runtime**
+
+---
+
+## 🧱 Required Vocabulary Structure (Must Use)
+
+Each context must use **role-based vocabulary**:
+
+```ts
+keywords: {
+  core_phrases: string[],
+  core_words: string[],
+  weak_words: string[],
+  negative_words: string[]
+}
+```
+
+---
+
+## 🔴 REQUIRED: Add / Enrich Crime Contexts (Bengali)
+
+### 1️⃣ Enforced Disappearance / “গুম” (MANDATORY)
+
+Create or enrich a dedicated context, e.g. `enforced_disappearance`:
+
+**Include these Bengali phrases and words (not limited to):**
+
+* Core phrases:
+
+  * `গুমের অভিযোগ`
+  * `জোরপূর্বক গুম`
+  * `গুম হওয়া`
+  * `গুম করার অভিযোগ`
+  * `নিখোঁজ করার অভিযোগ`
+* Core words:
+
+  * `গুম`
+  * `নিখোঁজ`
+  * `উধাও`
+* Weak / supporting words:
+
+  * `পরিবারের দাবি`
+  * `খোঁজ পাওয়া যায়নি`
+  * `নিখোঁজ ব্যক্তি`
+* Negative words:
+
+  * `যুদ্ধ`
+  * `বন্যা`
+  * `বিমান`
+  * `নির্বাচন`
+
+This context must:
+
+* Be treated as **crime / human rights related**
+* Be compatible with **investigation** and **protest** event chains
+
+---
+
+### 2️⃣ Enrich Existing Crime Contexts (Do NOT break them)
+
+Carefully enrich (not flatten):
+
+* `sexual_crime` (ধর্ষণ, যৌন নিপীড়ন)
+* `murder` (হত্যা, খুন)
+* `financial_crime` (অর্থপাচার, দুর্নীতি)
+* `threat_extortion` (হুমকি, চাঁদা)
+
+Add:
+
+* More **phrase-level Bengali expressions**
+* **Negative words** to prevent war / accident bleed
+
+---
+
+## 🧠 Entity Extraction Enrichment (Small Change Only)
+
+In `entity-extraction.ts`, add **crime-role indicators** to strengthen confidence (NOT anchors):
+
+Examples:
+
+* `ভুক্তভোগী`
+* `নিখোঁজ ব্যক্তি`
+* `গুম হওয়া ব্যক্তি`
+* `অভিযুক্ত`
+* `সন্দেহভাজন`
+
+These should **boost context confidence**, not override anchor logic.
+
+---
+
+## 🧮 Scoring Adjustments (Minimal)
+
+* Phrase match > single word match
+* Core words > weak words
+* Negative word hit should **penalize score** (e.g. ×0.3)
+* Do NOT change the global confidence threshold unless necessary
+
+---
+
+## 🧪 Acceptance Criteria (NON-NEGOTIABLE)
+
+After enrichment, the system must:
+
+✅ Correctly group:
+
+* “গুমের অভিযোগ” related follow-up posts
+* Investigation / protest updates linked to the same disappearance
+
+❌ Must NOT group:
+
+* War, accident, weather, or political news that merely contains words like “নিখোঁজ” in a different context
+
+---
+
+## 📦 Expected Output
+
+* Updated context definitions (TypeScript or JSON)
+* Clear explanation of why each new word/phrase belongs
+* Confirmation that no existing logic was broken
+* Notes on how false positives are reduced
+
+---
+
+## 🔚 End of Task Prompt
+
+---

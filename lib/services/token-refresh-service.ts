@@ -32,7 +32,7 @@ export class TokenRefreshService {
     } else {
       this.storage = new PersistentTokenStorage()
     }
-    
+
     // Try to load existing token on startup
     this.loadStoredToken()
   }
@@ -66,7 +66,7 @@ export class TokenRefreshService {
     console.log('[TokenRefresh] Force refreshing token...')
     this.tokenData = null
     this.refreshPromise = null
-    
+
     // Clear stored token
     if (this.storage) {
       try {
@@ -75,7 +75,7 @@ export class TokenRefreshService {
         console.error('[TokenRefresh] Error clearing stored token:', error)
       }
     }
-    
+
     return await this.getAccessToken()
   }
 
@@ -85,10 +85,10 @@ export class TokenRefreshService {
   private isTokenValid(tokenData?: TokenData): boolean {
     const data = tokenData || this.tokenData
     if (!data) return false
-    
+
     const now = Date.now()
     const expiresAt = data.expiresAt
-    
+
     // Token is valid if it hasn't expired and won't expire in the next 5 minutes
     return now < (expiresAt - this.REFRESH_BUFFER)
   }
@@ -98,49 +98,60 @@ export class TokenRefreshService {
    */
   private async performRefresh(): Promise<string | null> {
     const now = Date.now()
-    
+
     // Rate limiting
     if (now - this.lastRefreshAttempt < this.REFRESH_COOLDOWN) {
       console.log('[TokenRefresh] Rate limited, waiting...')
       await new Promise(resolve => setTimeout(resolve, this.REFRESH_COOLDOWN - (now - this.lastRefreshAttempt)))
     }
-    
+
     this.lastRefreshAttempt = now
 
     try {
       console.log('[TokenRefresh] Attempting token refresh...')
-      
-      // Strategy 1: Try configured auth URL
-      let token = await this.tryAuthEndpoint(this.config.authUrl)
-      if (token) {
-        this.scheduleNextRefresh()
-        return token
+
+      // Strategy 1: Try configured auth URL and explicit refresh endpoint
+      const explicitRefreshUrl = "http://192.168.100.36:9055/api/token/refresh";
+
+      const endpointsToTry = [
+        explicitRefreshUrl,
+        this.config.authUrl,
+      ].filter(url => url && url.startsWith('http'));
+
+      for (const url of endpointsToTry) {
+        let token = await this.tryAuthEndpoint(url);
+        if (token) {
+          this.scheduleNextRefresh();
+          return token;
+        }
       }
 
-      // Strategy 2: Try common OAuth2 endpoints
-      const baseUrl = this.config.authUrl.split('/api')[0] || this.config.authUrl.split('/auth')[0]
-      const oauthEndpoints = [
-        `${baseUrl}/oauth/token`,
-        `${baseUrl}/api/oauth/token`,
-        `${baseUrl}/auth/oauth/token`,
-        `${baseUrl}/api/auth/token`,
-        `${baseUrl}/api/login`,
-        `${baseUrl}/api/auth/login`,
-        `${baseUrl}/api/token`,
-        `${baseUrl}/api/authenticate`,
-      ]
+      // Strategy 2: Derive common endpoints if initial attempts fail
+      if (this.config.authUrl && this.config.authUrl.startsWith('http')) {
+        const baseUrl = this.config.authUrl.split('/api')[0] || this.config.authUrl.split('/auth')[0]
+        const oauthEndpoints = [
+          `${baseUrl}/oauth/token`,
+          `${baseUrl}/api/oauth/token`,
+          `${baseUrl}/auth/oauth/token`,
+          `${baseUrl}/api/auth/token`,
+          `${baseUrl}/api/login`,
+          `${baseUrl}/api/auth/login`,
+          `${baseUrl}/api/token`,
+          `${baseUrl}/api/authenticate`,
+        ]
 
-      for (const endpoint of oauthEndpoints) {
-        token = await this.tryAuthEndpoint(endpoint)
-        if (token) {
-          this.scheduleNextRefresh()
-          return token
+        for (const endpoint of oauthEndpoints) {
+          let token = await this.tryAuthEndpoint(endpoint)
+          if (token) {
+            this.scheduleNextRefresh()
+            return token
+          }
         }
       }
 
       // Strategy 3: Try OAuth2 client credentials flow
       if (this.config.clientId && this.config.clientSecret) {
-        token = await this.tryOAuth2ClientCredentials()
+        let token = await this.tryOAuth2ClientCredentials()
         if (token) {
           this.scheduleNextRefresh()
           return token
@@ -162,7 +173,7 @@ export class TokenRefreshService {
   private async tryAuthEndpoint(endpoint: string): Promise<string | null> {
     try {
       console.log(`[TokenRefresh] Trying endpoint: ${endpoint}`)
-      
+
       // Try different request formats
       const authFormats = [
         // Standard email/password
@@ -202,7 +213,7 @@ export class TokenRefreshService {
         const form = new URLSearchParams()
         form.append('username', this.config.email)
         form.append('password', this.config.password)
-        
+
         const response = await axios.post(endpoint, form.toString(), {
           timeout: 30000,
           headers: {
@@ -235,7 +246,7 @@ export class TokenRefreshService {
   private async tryOAuth2ClientCredentials(): Promise<string | null> {
     try {
       console.log('[TokenRefresh] Trying OAuth2 client credentials flow...')
-      
+
       const form = new URLSearchParams()
       form.append('grant_type', 'client_credentials')
       form.append('client_id', this.config.clientId!)
@@ -317,7 +328,7 @@ export class TokenRefreshService {
    */
   private async storeToken(token: string): Promise<void> {
     const expiresAt = this.parseTokenExpiry(token) || (Date.now() + 3600000) // Default 1 hour
-    
+
     this.tokenData = {
       token,
       expiresAt,
@@ -359,10 +370,10 @@ export class TokenRefreshService {
     if (!this.tokenData) return
 
     const refreshTime = this.tokenData.expiresAt - this.REFRESH_BUFFER - Date.now()
-    
+
     if (refreshTime > 0) {
       console.log(`[TokenRefresh] Scheduling refresh in ${Math.round(refreshTime / 1000)} seconds`)
-      
+
       this.refreshTimer = setTimeout(async () => {
         console.log('[TokenRefresh] Scheduled refresh triggered')
         await this.getAccessToken()
@@ -375,7 +386,7 @@ export class TokenRefreshService {
    */
   async getAuthHeaders(): Promise<Record<string, string>> {
     const token = await this.getAccessToken()
-    
+
     if (token) {
       return {
         'Authorization': `Bearer ${token}`,
@@ -432,24 +443,26 @@ export class TokenRefreshService {
 }
 
 // Singleton instance for the application
-let tokenService: TokenRefreshService | null = null
+declare global {
+  var tokenService: TokenRefreshService | null
+}
 
 export function getTokenService(): TokenRefreshService | null {
-  return tokenService
+  return global.tokenService || null
 }
 
 export function initializeTokenService(config: AuthConfig, useDatabase: boolean = false, prisma?: any): TokenRefreshService {
-  if (tokenService) {
-    tokenService.destroy()
+  if (global.tokenService) {
+    global.tokenService.destroy()
   }
-  
-  tokenService = new TokenRefreshService(config, useDatabase, prisma)
-  return tokenService
+
+  global.tokenService = new TokenRefreshService(config, useDatabase, prisma)
+  return global.tokenService
 }
 
 export function destroyTokenService(): void {
-  if (tokenService) {
-    tokenService.destroy()
-    tokenService = null
+  if (global.tokenService) {
+    global.tokenService.destroy()
+    global.tokenService = null
   }
 }

@@ -118,3 +118,19 @@ model TokenCache {
   
   @@map("token_cache")
 }
+
+model Person {
+  id              String   @id @default(cuid())
+  externalId      String   @unique
+  name            String
+  profileUrl      String?
+  proPic          String?
+  commentTime     DateTime?
+  mostTalkedTopic String?
+  sentiment       String?
+  count           Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("persons")
+}

@@ -8,7 +8,7 @@ function initializeService() {
   if (isInitialized) return
 
   const config = {
-    authUrl: process.env.EXTERNAL_AUTH_URL || 'http://192.168.100.35:9055/api/login/',
+    authUrl: process.env.EXTERNAL_AUTH_URL || 'http://192.168.100.36:9053/auth/login',
     email: process.env.EXTERNAL_API_EMAIL || '',
     password: process.env.EXTERNAL_API_PASSWORD || '',
     clientId: process.env.OAUTH_CLIENT_ID,
@@ -19,9 +19,11 @@ function initializeService() {
   if (config.email && config.password) {
     initializeTokenService(config)
     isInitialized = true
-    console.log('[TokenAPI] Token service initialized')
+    console.log('[TokenAPI] Token service initialized with URL:', config.authUrl)
   } else {
     console.warn('[TokenAPI] Token service not initialized - missing credentials')
+    console.warn('[TokenAPI] Email:', config.email ? 'SET' : 'MISSING')
+    console.warn('[TokenAPI] Password:', config.password ? 'SET' : 'MISSING')
   }
 }
 
@@ -29,7 +31,7 @@ function initializeService() {
 export async function GET(request: NextRequest) {
   try {
     initializeService()
-    
+
     const tokenService = getTokenService()
     if (!tokenService) {
       return NextResponse.json({
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
     }
 
     const status = tokenService.getTokenStatus()
-    
+
     return NextResponse.json({
       success: true,
       data: {
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     initializeService()
-    
+
     const tokenService = getTokenService()
     if (!tokenService) {
       return NextResponse.json({
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[TokenAPI] Force refreshing token...')
     const token = await tokenService.forceRefresh()
-    
+
     if (token) {
       const status = tokenService.getTokenStatus()
       return NextResponse.json({
@@ -107,7 +109,7 @@ export async function DELETE(request: NextRequest) {
     console.log('[TokenAPI] Clearing token cache...')
     destroyTokenService()
     isInitialized = false
-    
+
     return NextResponse.json({
       success: true,
       message: 'Token cache cleared'
