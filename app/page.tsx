@@ -48,8 +48,8 @@ export default function Dashboard() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [filters, setFilters] = useState<DashboardFilters>({
     dateRange: {
-      from: dayjs().subtract(100, "years").toDate(), // Very wide default - effectively no date filter
-      to: dayjs().add(1, "year").toDate(), // Include future dates too
+      from: dayjs().subtract(30, "days").toDate(), // Default to last 30 days
+      to: new Date(), // Today
     },
     categories: [],
     sources: [],
@@ -57,6 +57,30 @@ export default function Dashboard() {
   })
 
   // Auth disabled: no redirect
+
+  // Normalize date range on mount to prevent invalid ranges
+  useEffect(() => {
+    const { from, to } = filters.dateRange
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+
+    // Check for invalid date range
+    const isInvalid =
+      !from || !to ||
+      from.getFullYear() < 2000 ||
+      to > today
+
+    if (isInvalid) {
+      // Replace with last 30 days
+      setFilters(prev => ({
+        ...prev,
+        dateRange: {
+          from: dayjs().subtract(30, "days").toDate(),
+          to: new Date()
+        }
+      }))
+    }
+  }, []) // Run only on mount
 
   const filteredPosts = useMemo(() => {
     if (!data?.trendingPosts) {
@@ -99,11 +123,11 @@ export default function Dashboard() {
       )
     }
 
-    // Apply date range filter - only if user explicitly set a narrow date range
-    // Skip date filtering if it's the default wide range (effectively showing all posts)
+    // Apply date range filter - only if user explicitly set a range
+    // Skip date filtering if it's the default 30-day range
     const isDefaultDateRange =
-      dayjs(filters.dateRange.from).isBefore(dayjs().subtract(50, "years")) &&
-      dayjs(filters.dateRange.to).isAfter(dayjs().add(1, "month"))
+      dayjs(filters.dateRange.from).isSame(dayjs().subtract(30, "days").toDate(), "day") &&
+      dayjs(filters.dateRange.to).isSame(new Date(), "day")
 
     if (!isDefaultDateRange && filters.dateRange.from && filters.dateRange.to) {
       filtered = filtered.filter((post) => {
@@ -161,11 +185,11 @@ export default function Dashboard() {
       )
     }
 
-    // Apply date range filter - only if user explicitly set a narrow date range
-    // Skip date filtering if it's the default wide range (effectively showing all posts)
+    // Apply date range filter - only if user explicitly set a range
+    // Skip date filtering if it's the default 30-day range
     const isDefaultDateRange =
-      dayjs(filters.dateRange.from).isBefore(dayjs().subtract(50, "years")) &&
-      dayjs(filters.dateRange.to).isAfter(dayjs().add(1, "month"))
+      dayjs(filters.dateRange.from).isSame(dayjs().subtract(30, "days").toDate(), "day") &&
+      dayjs(filters.dateRange.to).isSame(new Date(), "day")
 
     if (!isDefaultDateRange && filters.dateRange.from && filters.dateRange.to) {
       filtered = filtered.filter((post) => {

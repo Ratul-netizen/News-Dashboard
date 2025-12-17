@@ -1,0 +1,77 @@
+
+C:\Users\Ratul\Downloads\Compressed\news-dashboard>docker compose up --build
+[+] Building 75.8s (14/17)
+ => [internal] load local bake definitions                                                                              0.0s
+ => => reading from stdin 610B                                                                                          0.0s
+ => [internal] load build definition from Dockerfile                                                                    0.1s
+ => => transferring dockerfile: 1.04kB                                                                                  0.0s
+ => [internal] load metadata for docker.io/library/node:18-alpine                                                       2.1s
+ => [auth] library/node:pull token for registry-1.docker.io                                                             0.0s
+ => [internal] load .dockerignore                                                                                       0.1s
+ => => transferring context: 1.13kB                                                                                     0.0s
+ => [ 1/11] FROM docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09  0.1s
+ => => resolve docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9  0.1s
+ => [internal] load build context                                                                                       0.5s
+ => => transferring context: 3.48MB                                                                                     0.4s
+ => CACHED [ 2/11] RUN apk add --no-cache   bash   curl   cronie   openssl   libc6-compat   && rm -rf /var/cache/apk/*  0.0s
+ => CACHED [ 3/11] WORKDIR /app                                                                                         0.0s
+ => CACHED [ 4/11] COPY package*.json ./                                                                                0.0s
+ => CACHED [ 5/11] RUN npm ci --legacy-peer-deps                                                                        0.0s
+ => [ 6/11] COPY . .                                                                                                    0.1s
+ => [ 7/11] RUN npx prisma generate                                                                                     5.1s
+ => ERROR [ 8/11] RUN npm run build                                                                                    67.1s
+------
+ > [ 8/11] RUN npm run build:
+0.565
+0.565 > my-v0-project@0.1.0 build
+0.565 > next build
+0.565
+1.635 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+1.636 This information is used to shape Next.js' roadmap and prioritize features.
+1.636 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+1.636 https://nextjs.org/telemetry
+1.636
+1.755   ▲ Next.js 14.2.16
+1.755
+1.883    Creating an optimized production build ...
+49.24  ✓ Compiled successfully
+49.24    Linting and checking validity of types ...
+66.65 Failed to compile.
+66.65
+66.65 ./components/ui/calendar.tsx:22:11
+66.65 Type error: Cannot find name 'buttonVariants'.
+66.65
+66.65   20 |         nav: "space-x-1 flex items-center",
+66.65   21 |         nav_button: cn(
+66.65 > 22 |           buttonVariants({ variant: "outline" }),
+66.65      |           ^
+66.65   23 |           "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 border-gray-600 text-gray-300 hover:bg-gray-700",
+66.65   24 |         ),
+66.65   25 |         nav_button_previous: "absolute left-1",
+------
+2025/12/17 17:32:14 http2: server: error reading preface from client //./pipe/dockerDesktopLinuxEngine: file has already been closed
+
+Dockerfile:29
+
+--------------------
+
+  27 |
+
+  28 |     # Build Next.js for production
+
+  29 | >>> RUN npm run build
+
+  30 |
+
+  31 |     # Ensure scripts are executable
+
+--------------------
+
+failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+
+
+
+View build details: docker-desktop://dashboard/build/default/default/lh1qbcypahl7nb3kh2kq7e7dy
+
+
+C:\Users\Ratul\Downloads\Compressed\news-dashboard>

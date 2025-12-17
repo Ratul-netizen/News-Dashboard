@@ -41,8 +41,8 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
   const clearFilters = () => {
     const clearedFilters: DashboardFilters = {
       dateRange: {
-        from: dayjs().subtract(100, "years").toDate(), // Very wide default - effectively no filter
-        to: dayjs().add(1, "year").toDate(),
+        from: dayjs().subtract(30, "days").toDate(), // Default to last 30 days
+        to: new Date(), // Today
       },
       categories: [],
       sources: [],
@@ -51,10 +51,10 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
     onFiltersChange(clearedFilters)
   }
 
-  // Check if date range is the default wide range (effectively no filter)
-  const isDefaultDateRange = 
-    dayjs(filters.dateRange.from).isBefore(dayjs().subtract(50, "years")) &&
-    dayjs(filters.dateRange.to).isAfter(dayjs().add(1, "month"))
+  // Check if date range is the default 30-day range
+  const isDefaultDateRange =
+    dayjs(filters.dateRange.from).isSame(dayjs().subtract(30, "days").toDate(), "day") &&
+    dayjs(filters.dateRange.to).isSame(new Date(), "day")
 
   return (
     <div className="sticky top-[73px] z-40 bg-[#1A1A1A] border-b border-gray-800 mt-[73px]">
@@ -90,7 +90,7 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
                 <CalendarComponent
                   initialFocus
                   mode="range"
-                  defaultMonth={dateRange?.from}
+                  defaultMonth={dateRange?.from || new Date()}
                   selected={{ from: dateRange.from, to: dateRange.to }}
                   onSelect={(range) => {
                     // Only update when both dates are selected (complete range)
@@ -101,12 +101,12 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
                       const toDate = new Date(range.to)
                       fromDate.setHours(0, 0, 0, 0)
                       toDate.setHours(0, 0, 0, 0)
-                      
-                      // If same day, use default wide range instead (effectively no filter)
+
+                      // If same day, use default 30-day range instead
                       if (fromDate.getTime() === toDate.getTime()) {
-                        handleDateRangeChange({ 
-                          from: dayjs().subtract(100, "years").toDate(), 
-                          to: dayjs().add(1, "year").toDate()
+                        handleDateRangeChange({
+                          from: dayjs().subtract(30, "days").toDate(),
+                          to: new Date()
                         })
                       } else {
                         handleDateRangeChange({ from: range.from, to: range.to })
@@ -119,6 +119,7 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
                   }}
                   numberOfMonths={2}
                   className="text-white"
+                  toDate={new Date()}
                 />
               </PopoverContent>
             </Popover>
@@ -160,8 +161,8 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
               Clear Filters
             </Button>
 
-            <Button 
-              onClick={onRefresh} 
+            <Button
+              onClick={onRefresh}
               disabled={isRefreshing}
               className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -171,36 +172,36 @@ export function FilterBar({ filters, onFiltersChange, filterOptions, onRefresh, 
         </div>
 
         {/* Active Filters Display - Only show if filters differ from defaults */}
-        {/* Date filter is considered "active" only if it's a narrow range (not the default wide range) */}
-        {(filters.categories.length > 0 || filters.sources.length > 0 || filters.platforms.length > 0 || 
+        {/* Date filter is considered "active" only if it's not the default 30-day range */}
+        {(filters.categories.length > 0 || filters.sources.length > 0 || filters.platforms.length > 0 ||
           (filters.dateRange.from && filters.dateRange.to && !isDefaultDateRange)) && (
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            <span className="text-sm text-gray-400">Active filters:</span>
-            
-            {/* Date Range Badge - Only show if it's a narrow range (not the default wide range) */}
-            {filters.dateRange.from && filters.dateRange.to && !isDefaultDateRange && (
-              <Badge variant="secondary" className="bg-orange-900 text-orange-100">
-                Date: {dayjs(filters.dateRange.from).format("MMM DD")} - {dayjs(filters.dateRange.to).format("MMM DD, YYYY")}
-              </Badge>
-            )}
-            
-            {filters.categories.map((category) => (
-              <Badge key={category} variant="secondary" className="bg-blue-900 text-blue-100">
-                Category: {category}
-              </Badge>
-            ))}
-            {filters.sources.map((source) => (
-              <Badge key={source} variant="secondary" className="bg-green-900 text-green-100">
-                Source: {source}
-              </Badge>
-            ))}
-            {filters.platforms.map((platform) => (
-              <Badge key={platform} variant="secondary" className="bg-purple-900 text-purple-100">
-                Platform: {platform}
-              </Badge>
-            ))}
-          </div>
-        )}
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <span className="text-sm text-gray-400">Active filters:</span>
+
+              {/* Date Range Badge - Only show if it's not the default 30-day range */}
+              {filters.dateRange.from && filters.dateRange.to && !isDefaultDateRange && (
+                <Badge variant="secondary" className="bg-orange-900 text-orange-100">
+                  Date: {dayjs(filters.dateRange.from).format("MMM DD")} - {dayjs(filters.dateRange.to).format("MMM DD, YYYY")}
+                </Badge>
+              )}
+
+              {filters.categories.map((category) => (
+                <Badge key={category} variant="secondary" className="bg-blue-900 text-blue-100">
+                  Category: {category}
+                </Badge>
+              ))}
+              {filters.sources.map((source) => (
+                <Badge key={source} variant="secondary" className="bg-green-900 text-green-100">
+                  Source: {source}
+                </Badge>
+              ))}
+              {filters.platforms.map((platform) => (
+                <Badge key={platform} variant="secondary" className="bg-purple-900 text-purple-100">
+                  Platform: {platform}
+                </Badge>
+              ))}
+            </div>
+          )}
       </div>
     </div>
   )
