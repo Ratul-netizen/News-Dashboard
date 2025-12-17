@@ -71,7 +71,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (filters.platforms.length > 0) {
-      whereClause.primaryPlatform = { in: filters.platforms }
+      // whereClause.primaryPlatform = { in: filters.platforms }
+      // Filter by checking if ANY post in the news item belongs to the selected platforms
+      whereClause.posts = {
+        some: {
+          platform: { in: filters.platforms }
+        }
+      }
     }
 
     // Build where clause for posts (slightly different field names)
@@ -415,16 +421,16 @@ async function getFilterOptions() {
     distinct: ["primarySource"],
   })
 
-  // Get unique platforms
-  type PlatformRecord = { primaryPlatform: string | null }
-  const platforms: PlatformRecord[] = await prisma.newsItem.findMany({
-    select: { primaryPlatform: true },
-    distinct: ["primaryPlatform"],
+  // Get unique platforms from POSTS table (more accurate)
+  type PlatformRecord = { platform: string }
+  const platforms: PlatformRecord[] = await prisma.post.findMany({
+    select: { platform: true },
+    distinct: ["platform"],
   })
 
   return {
     categories: categories.map((c) => c.category).filter(Boolean),
     sources: sources.map((s) => s.primarySource),
-    platforms: platforms.map((p) => p.primaryPlatform),
+    platforms: platforms.map((p) => p.platform),
   }
 }

@@ -492,7 +492,7 @@ export async function POST(request: NextRequest) {
 
     let allPosts: any[] = []
     // Platforms to fetch posts for
-    const postPlatforms = ['F', 'X', 'Y', 'T']
+    const postPlatforms = ['F', 'X', 'Y', 'T', 'N']
 
     for (const platform of postPlatforms) {
       console.log(`[v0] Fetching posts for platform: ${platform}`)
@@ -586,7 +586,7 @@ export async function POST(request: NextRequest) {
     let allSources: any[] = []
 
     // Platforms to fetch sources for
-    const platforms = ['F', 'X', 'Y', 'T']
+    const platforms = ['F', 'X', 'Y', 'T', 'N']
 
     for (const platform of platforms) {
       console.log(`[v0] Fetching sources for platform: ${platform}`)

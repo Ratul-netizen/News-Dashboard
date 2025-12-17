@@ -86,6 +86,7 @@ export const PLATFORM_MAPPING: Record<string, string> = {
   L: "linkedin.com",
   TT: "tiktok.com",
   R: "reddit.com",
+  N: "news",
 }
 
 export const SENTIMENT_COLORS = {
