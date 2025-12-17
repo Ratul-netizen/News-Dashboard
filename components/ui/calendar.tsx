@@ -14,9 +14,9 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
       classNames={{
-        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-6 sm:space-y-0",
         month: "space-y-4",
-        caption: "flex justify-center pt-1 relative items-center",
+        caption: "flex justify-center pt-2 relative items-center",
         caption_label: "text-sm font-medium text-white",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
@@ -25,16 +25,13 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         ),
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
-        table: "w-full border-collapse space-y-1",
-        head_row: "flex",
-        head_cell: "text-gray-400 rounded-md w-9 font-normal text-[0.8rem] text-center",
+        table: "w-full border-collapse table-fixed",
+        head_row: "",
+        head_cell: "text-gray-400 text-center align-middle text-[0.8rem] font-normal py-1 px-1",
 
-        row: "flex w-full mt-2",
-        cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-        day: cn(
-          buttonVariants({ variant: "ghost" }),
-          "h-9 w-9 p-0 font-normal aria-selected:opacity-100 text-gray-300 hover:bg-gray-700 hover:text-white"
-        ),
+        row: "",
+        cell: "h-10 text-center align-middle relative py-0 px-1 [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+        day: "h-10 w-full text-center font-normal bg-transparent border-0 cursor-pointer text-gray-300 hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-0 aria-selected:opacity-100 rounded-md",
         day_range_end: "day-range-end",
         day_selected: "bg-blue-600 text-white hover:bg-blue-600 hover:text-white focus:bg-blue-600 focus:text-white",
         day_today: "bg-gray-700 text-white",
