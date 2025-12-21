@@ -1,71 +1,27 @@
----
+Tell me what you understood:
 
-## ✅ Claude Prompt — Reduce Calendar Congestion (Spacing Only)
+Implement the following **two changes only** in the **Source–Platform Network Graph**:
 
-> You are working on a **Next.js client component** that wraps **react-day-picker** using a native HTML `<table>` layout.
->
-> **CURRENT STATUS (IMPORTANT):**
->
-> * Table layout is now correct and stable
-> * Weekdays and dates align properly
-> * No grid/flex is used on table elements
-> * Date logic and filters must NOT be touched
->
-> The only remaining issue is **visual congestion**:
->
-> * Rows feel slightly tight
-> * Columns feel cramped
-> * Two-month view needs more breathing room
->
-> ---
->
-> ## 🚫 STRICT CONSTRAINTS
->
-> * ❌ Do NOT change date logic, state, filters, or props
-> * ❌ Do NOT change HTML structure
-> * ❌ Do NOT apply `flex` or `grid` to `<table>`, `<tr>`, `<th>`, `<td>`, or `.day`
-> * ❌ Do NOT add fixed widths (`w-*`)
-> * ❌ Do NOT redesign colors or typography
-> * ✅ Only adjust **padding, height, and spacing**
->
-> ---
->
-> ## 🎯 GOAL
->
-> Make the calendar feel **less congested and more readable** by:
->
-> * Slightly increasing row height
-> * Adding subtle horizontal padding inside cells
-> * Increasing spacing between the two months
-> * Improving separation between caption, weekdays, and dates
->
-> The result should feel **lighter**, not larger.
->
-> ---
->
-> ## 🛠️ ALLOWED CHANGES (ONLY THESE)
->
-> In `components/ui/calendar.tsx`:
->
-> * Increase `cell` and `day` height slightly (e.g. `h-10`)
-> * Add light horizontal padding to `cell` (e.g. `px-1`)
-> * Add vertical padding to `head_cell` (e.g. `py-1`)
-> * Increase inter-month spacing (`space-x-6`)
-> * Optionally add a little padding around the month caption
->
-> ⚠️ Do NOT use margins that break table alignment
-> ⚠️ Do NOT reintroduce layout hacks
->
-> ---
->
-> ## 📤 OUTPUT REQUIREMENTS
->
-> * Short explanation (1–2 lines max)
-> * Exact className changes only
-> * Modify **only** `components/ui/calendar.tsx`
-> * No refactors, no unrelated cleanup
->
-> Improve spacing so the calendar is clean, readable, and breathable while preserving the correct table layout and current behavior.
+1. **Add Master / Root Node**
 
----
+   * Introduce a **master (root) node** that represents the **main news post selected for analysis**.
+   * This node should:
+
+     * Be created dynamically when the user opens post analysis
+     * Display the **main post content** (via click or tooltip)
+     * Be visually distinct from all other nodes (unique color, shape, or size)
+     * Act as the **origin node**, connecting to all platform nodes
+   * Existing **source → platform** relationships must remain unchanged.
+
+2. **Fix Platform Color Mapping**
+
+   * Platform nodes (e.g., Facebook, YouTube, News, Twitter) are currently rendered with the **same color**.
+   * Update the color logic so that:
+
+     * Each platform always has a **unique, consistent color**
+     * Colors are based on **platform type**, not array index or render order
+     * Colors persist across zoom, pan, and re-renders
+
+Only implement these two items.
+Do **not** change layout, weights, zoom behavior, or interactions.
 

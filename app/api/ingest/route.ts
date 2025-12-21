@@ -490,630 +490,633 @@ export async function POST(request: NextRequest) {
   try {
     console.log("[v0] Starting data ingestion process...")
 
-    let allPosts: any[] = []
-    // Platforms to fetch posts for
-    const postPlatforms = ['F', 'X', 'Y', 'T', 'N']
-
-    for (const platform of postPlatforms) {
-      console.log(`[v0] Fetching posts for platform: ${platform}`)
-      let currentPage = 1
-      const pageSize = 1000 // Maximum page size
-      let totalPages: number | null = null
-
-      // Fetch all pages of data for this platform
-      while (true) {
+      // Run heavy processing in background to avoid blocking the request and causing timeouts
+      ; (async () => {
         try {
-          console.log(`[v0] Fetching posts page ${currentPage} for platform ${platform}...`)
 
-          // Construct URL robustly using URL object
-          const urlObj = new URL(API_URL)
-          urlObj.searchParams.set("page", String(currentPage))
-          urlObj.searchParams.set("page_size", String(pageSize))
-          urlObj.searchParams.set("platform", platform)
+          let allPosts: any[] = []
+          // Platforms to fetch posts for
+          const postPlatforms = ['F', 'X', 'Y', 'T', 'N']
 
-          const url = urlObj.toString()
+          for (const platform of postPlatforms) {
+            console.log(`[v0] Fetching posts for platform: ${platform}`)
+            let currentPage = 1
+            const pageSize = 1000 // Maximum page size
+            let totalPages: number | null = null
 
-          const response = await getWithAuth(url, 30000)
+            // Fetch all pages of data for this platform
+            while (true) {
+              try {
+                console.log(`[v0] Fetching posts page ${currentPage} for platform ${platform}...`)
 
-          const data = response.data
+                // Construct URL robustly using URL object
+                const urlObj = new URL(API_URL)
+                urlObj.searchParams.set("page", String(currentPage))
+                urlObj.searchParams.set("page_size", String(pageSize))
+                urlObj.searchParams.set("platform", platform)
 
-          const pageItems: any[] = Array.isArray(data.result)
-            ? data.result
-            : Array.isArray(data.results)
-              ? data.results
-              : []
+                const url = urlObj.toString()
 
-          if (pageItems.length === 0) {
-            console.log(`[v0] Posts page ${currentPage} for platform ${platform} returned 0 items; moving to next platform.`)
-            break
+                const response = await getWithAuth(url, 30000)
+
+                const data = response.data
+
+                const pageItems: any[] = Array.isArray(data.result)
+                  ? data.result
+                  : Array.isArray(data.results)
+                    ? data.results
+                    : []
+
+                if (pageItems.length === 0) {
+                  console.log(`[v0] Posts page ${currentPage} for platform ${platform} returned 0 items; moving to next platform.`)
+                  break
+                }
+
+                // Inject platform into the post objects since the API might not return it
+                const postsWithPlatform = pageItems.map(post => ({
+                  ...post,
+                  platform: platform
+                }))
+
+                allPosts = allPosts.concat(postsWithPlatform)
+                console.log(`[v0] Fetched ${pageItems.length} posts from page ${currentPage} for platform ${platform}`)
+
+                // Determine total pages if provided
+                if (typeof data.total_pages === 'number') {
+                  totalPages = data.total_pages
+                }
+
+                // Debug: Log pagination info
+                console.log(`[v0] Page ${currentPage} - current_page: ${data.current_page}, total_pages: ${data.total_pages}, has_next: ${Boolean(data.next)}`)
+
+                // Force stop after 10 pages (increased from 3)
+                if (currentPage >= 10) {
+                  console.log(`[v0] Force stopping at page ${currentPage} (API limit reached)`)
+                  break
+                }
+
+                // Next page condition: prefer numerical paging info when available
+                const hasMoreByNumbers = typeof data.current_page === 'number' && typeof data.total_pages === 'number'
+                  ? data.current_page < data.total_pages
+                  : null
+
+                // Only use link-based pagination if we don't have numerical info
+                const hasMoreByLink = hasMoreByNumbers === null && Boolean(data.next)
+
+                console.log(`[v0] hasMoreByNumbers: ${hasMoreByNumbers}, hasMoreByLink: ${hasMoreByLink}`)
+
+                if (hasMoreByNumbers === true || hasMoreByLink) {
+                  currentPage++
+                  console.log(`[v0] Continuing to page ${currentPage} for platform ${platform}`)
+                } else {
+                  console.log(`[v0] Stopping pagination at page ${currentPage} for platform ${platform}`)
+                  break
+                }
+
+                // Add a small delay between requests to be respectful
+                await new Promise(resolve => setTimeout(resolve, 100))
+
+              } catch (error) {
+                console.error(`[v0] Error fetching posts page ${currentPage} for platform ${platform}:`, error)
+                break
+              }
+            }
           }
 
-          // Inject platform into the post objects since the API might not return it
-          const postsWithPlatform = pageItems.map(post => ({
-            ...post,
-            platform: platform
-          }))
+          console.log(`[v0] Total posts fetched: ${allPosts.length}`)
 
-          allPosts = allPosts.concat(postsWithPlatform)
-          console.log(`[v0] Fetched ${pageItems.length} posts from page ${currentPage} for platform ${platform}`)
+          // Fetch sources data
+          console.log("[v0] Fetching sources data...")
+          let allSources: any[] = []
 
-          // Determine total pages if provided
-          if (typeof data.total_pages === 'number') {
-            totalPages = data.total_pages
+          // Platforms to fetch sources for
+          const platforms = ['F', 'X', 'Y', 'T', 'N']
+
+          for (const platform of platforms) {
+            console.log(`[v0] Fetching sources for platform: ${platform}`)
+            let currentSourcePage = 1
+            const sourcePageSize = 1000
+
+            while (true) {
+              try {
+                console.log(`[v0] Fetching sources page ${currentSourcePage} for platform ${platform}...`)
+
+                // Construct URL robustly using URL object
+                const urlObj = new URL(SOURCES_API_URL)
+                urlObj.searchParams.set("page", String(currentSourcePage))
+                urlObj.searchParams.set("page_size", String(sourcePageSize))
+                urlObj.searchParams.set("platform", platform)
+
+                const url = urlObj.toString()
+
+                const sourcesResponse = await getWithAuth(url, 30000)
+
+                const sourcesData = sourcesResponse.data
+
+                const pageSources: any[] = Array.isArray(sourcesData.result)
+                  ? sourcesData.result
+                  : Array.isArray(sourcesData.results)
+                    ? sourcesData.results
+                    : []
+
+                if (pageSources.length === 0) {
+                  console.log(`[v0] Sources page ${currentSourcePage} for platform ${platform} returned 0 items; moving to next platform.`)
+                  break
+                }
+
+                // Inject platform into the source objects since the API might not return it
+                const sourcesWithPlatform = pageSources.map(source => ({
+                  ...source,
+                  platform: platform
+                }))
+
+                allSources = allSources.concat(sourcesWithPlatform)
+                console.log(`[v0] Fetched ${pageSources.length} sources from page ${currentSourcePage} for platform ${platform}`)
+
+                // Check if there are more pages
+                if (typeof sourcesData.current_page === 'number' && typeof sourcesData.total_pages === 'number') {
+                  if (sourcesData.current_page < sourcesData.total_pages) {
+                    currentSourcePage++
+                  } else {
+                    break
+                  }
+                } else if (sourcesData.next) {
+                  currentSourcePage++
+                } else {
+                  break
+                }
+
+                // Add a small delay between requests
+                await new Promise(resolve => setTimeout(resolve, 100))
+
+              } catch (error) {
+                console.error(`[v0] Error fetching sources page ${currentSourcePage} for platform ${platform}:`, error)
+                break
+              }
+            }
           }
 
-          // Debug: Log pagination info
-          console.log(`[v0] Page ${currentPage} - current_page: ${data.current_page}, total_pages: ${data.total_pages}, has_next: ${Boolean(data.next)}`)
+          console.log(`[v0] Total sources fetched: ${allSources.length}`)
 
-          // Force stop after 10 pages (increased from 3)
-          if (currentPage >= 10) {
-            console.log(`[v0] Force stopping at page ${currentPage} (API limit reached)`)
-            break
-          }
-
-          // Next page condition: prefer numerical paging info when available
-          const hasMoreByNumbers = typeof data.current_page === 'number' && typeof data.total_pages === 'number'
-            ? data.current_page < data.total_pages
-            : null
-
-          // Only use link-based pagination if we don't have numerical info
-          const hasMoreByLink = hasMoreByNumbers === null && Boolean(data.next)
-
-          console.log(`[v0] hasMoreByNumbers: ${hasMoreByNumbers}, hasMoreByLink: ${hasMoreByLink}`)
-
-          if (hasMoreByNumbers === true || hasMoreByLink) {
-            currentPage++
-            console.log(`[v0] Continuing to page ${currentPage} for platform ${platform}`)
-          } else {
-            console.log(`[v0] Stopping pagination at page ${currentPage} for platform ${platform}`)
-            break
-          }
-
-          // Add a small delay between requests to be respectful
-          await new Promise(resolve => setTimeout(resolve, 100))
-
-        } catch (error) {
-          console.error(`[v0] Error fetching posts page ${currentPage} for platform ${platform}:`, error)
-          break
-        }
-      }
-    }
-
-    console.log(`[v0] Total posts fetched: ${allPosts.length}`)
-
-    // Fetch sources data
-    console.log("[v0] Fetching sources data...")
-    let allSources: any[] = []
-
-    // Platforms to fetch sources for
-    const platforms = ['F', 'X', 'Y', 'T', 'N']
-
-    for (const platform of platforms) {
-      console.log(`[v0] Fetching sources for platform: ${platform}`)
-      let currentSourcePage = 1
-      const sourcePageSize = 1000
-
-      while (true) {
-        try {
-          console.log(`[v0] Fetching sources page ${currentSourcePage} for platform ${platform}...`)
-
-          // Construct URL robustly using URL object
-          const urlObj = new URL(SOURCES_API_URL)
-          urlObj.searchParams.set("page", String(currentSourcePage))
-          urlObj.searchParams.set("page_size", String(sourcePageSize))
-          urlObj.searchParams.set("platform", platform)
-
-          const url = urlObj.toString()
-
-          const sourcesResponse = await getWithAuth(url, 30000)
-
-          const sourcesData = sourcesResponse.data
-
-          const pageSources: any[] = Array.isArray(sourcesData.result)
-            ? sourcesData.result
-            : Array.isArray(sourcesData.results)
-              ? sourcesData.results
-              : []
-
-          if (pageSources.length === 0) {
-            console.log(`[v0] Sources page ${currentSourcePage} for platform ${platform} returned 0 items; moving to next platform.`)
-            break
-          }
-
-          // Inject platform into the source objects since the API might not return it
-          const sourcesWithPlatform = pageSources.map(source => ({
-            ...source,
-            platform: platform
-          }))
-
-          allSources = allSources.concat(sourcesWithPlatform)
-          console.log(`[v0] Fetched ${pageSources.length} sources from page ${currentSourcePage} for platform ${platform}`)
-
-          // Check if there are more pages
-          if (typeof sourcesData.current_page === 'number' && typeof sourcesData.total_pages === 'number') {
-            if (sourcesData.current_page < sourcesData.total_pages) {
-              currentSourcePage++
-            } else {
+          // Fetch persons data - DISABLED (not needed, was causing performance issues)
+          /*
+          console.log("[v0] Fetching persons data...")
+          let allPersons: any[] = []
+          let currentPersonPage = 1
+          const personPageSize = 1000
+      
+          while (true) {
+            try {
+              console.log(`[v0] Fetching persons page ${currentPersonPage}...`)
+              const urlObj = new URL(PERSONS_API_URL)
+              urlObj.searchParams.set("page", String(currentPersonPage))
+              urlObj.searchParams.set("page_size", String(personPageSize))
+      
+              const url = urlObj.toString()
+              const response = await getWithAuth(url, 30000)
+              const data = response.data
+      
+              // API returns 'users' array
+              const pagePersons = Array.isArray(data.users) ? data.users : []
+      
+              if (pagePersons.length === 0) {
+                console.log(`[v0] Persons page ${currentPersonPage} returned 0 items.`)
+                break
+              }
+      
+              allPersons = allPersons.concat(pagePersons)
+              console.log(`[v0] Fetched ${pagePersons.length} persons from page ${currentPersonPage}`)
+      
+              // Pagination logic
+              if (typeof data.current_page === 'number' && typeof data.total_pages === 'number') {
+                if (data.current_page < data.total_pages) {
+                  currentPersonPage++
+                } else {
+                  break
+                }
+              } else if (data.next) {
+                currentPersonPage++
+              } else {
+                break
+              }
+      
+              await new Promise(resolve => setTimeout(resolve, 100))
+            } catch (error) {
+              console.error(`[v0] Error fetching persons page ${currentPersonPage}:`, error)
               break
             }
-          } else if (sourcesData.next) {
-            currentSourcePage++
-          } else {
-            break
+          }
+          console.log(`[v0] Total persons fetched: ${allPersons.length}`)
+          */
+          console.log("[v0] Persons fetching disabled (not needed)")
+
+          console.log(`[v0] Total sources fetched: ${allSources.length}`)
+
+          // Transform external API format to internal format
+          const transformedPosts = allPosts.map(transformExternalPost)
+          const transformedSources = allSources.map(transformExternalSource)
+
+          // Debug: Log a few transformed posts to see the structure
+          console.log("[v0] Sample transformed post:", JSON.stringify(transformedPosts[0], null, 2))
+
+          let postsProcessed = 0
+          let newsItemsCreated = 0
+          let newsItemsUpdated = 0
+          let sourcesProcessed = 0
+
+          // Process each post
+          for (const apiPost of transformedPosts) {
+            try {
+              console.log(`[v0] Processing post: ${apiPost.post_id} - ${apiPost.post_text.substring(0, 50)}...`)
+
+              // Validate required fields
+              if (!apiPost.post_id) {
+                console.log(`[v0] Skipping post with missing post_id`)
+                continue
+              }
+
+              // Fallback text to avoid skipping posts entirely
+              if (!apiPost.post_text || apiPost.post_text.trim().length === 0) {
+                apiPost.post_text = `[No text] ${apiPost.source || ''}`.trim()
+              }
+              // Ensure postId is always a string
+              const postIdString = String(apiPost.post_id)
+
+              // Check if post already exists
+              const existingPost = await prisma.post.findFirst({
+                where: {
+                  postId: postIdString,
+                },
+              })
+
+              if (existingPost) {
+                console.log(`[v0] Updating existing post: ${postIdString}`)
+                // Update existing post
+                await prisma.post.update({
+                  where: {
+                    id: existingPost.id,
+                  },
+                  data: {
+                    postText: apiPost.post_text,
+                    postDate: apiPost.post_date,
+                    postLink: apiPost.post_link,
+                    platform: apiPost.platform,
+                    source: apiPost.source,
+                    category: apiPost.category,
+                    reactions: apiPost.reactions,
+                    shares: apiPost.shares,
+                    comments: apiPost.comments,
+                    sentiment: apiPost.sentiment,
+                    featuredImagesPath: apiPost.featured_images_path,
+                    trendingScore: calculateTrendingScore(apiPost.reactions, apiPost.shares, apiPost.comments, apiPost.post_date),
+                  },
+                })
+              } else {
+                console.log(`[v0] Creating new post: ${postIdString}`)
+                // Create new post
+                await prisma.post.create({
+                  data: {
+                    postId: postIdString,
+                    postText: apiPost.post_text,
+                    postDate: apiPost.post_date,
+                    postLink: apiPost.post_link,
+                    platform: apiPost.platform,
+                    source: apiPost.source,
+                    category: apiPost.category,
+                    reactions: apiPost.reactions,
+                    shares: apiPost.shares,
+                    comments: apiPost.comments,
+                    sentiment: apiPost.sentiment,
+                    featuredImagesPath: apiPost.featured_images_path,
+                    trendingScore: calculateTrendingScore(apiPost.reactions, apiPost.shares, apiPost.comments, apiPost.post_date),
+                    baseKey: apiPost.post_text.substring(0, 100), // Simple base key
+                    groupKey: `${apiPost.source}_${apiPost.category || 'uncategorized'}_${apiPost.post_date.toISOString().split('T')[0]}`, // Group by source + category + date
+                  },
+                })
+              }
+
+              postsProcessed++
+              console.log(`[v0] Successfully processed post ${postsProcessed}/${transformedPosts.length}`)
+            } catch (error) {
+              console.error(`[v0] Error processing post ${apiPost.post_id}:`, error)
+              console.error(`[v0] Post data:`, JSON.stringify(apiPost, null, 2))
+
+              // Check if it's a unique constraint error
+              if (error instanceof Error && error.message && error.message.includes('Unique constraint')) {
+                console.error(`[v0] Unique constraint violation for post ${apiPost.post_id}`)
+              }
+            }
           }
 
-          // Add a small delay between requests
-          await new Promise(resolve => setTimeout(resolve, 100))
+          // Process each source
+          console.log("[v0] Processing sources...")
+          for (const apiSource of transformedSources) {
+            try {
+              console.log(`[v0] Processing source: ${apiSource.source_id} - ${apiSource.name}`)
 
-        } catch (error) {
-          console.error(`[v0] Error fetching sources page ${currentSourcePage} for platform ${platform}:`, error)
-          break
-        }
-      }
-    }
+              // Validate required fields
+              if (!apiSource.source_id) {
+                console.log(`[v0] Skipping source with missing source_id`)
+                continue
+              }
 
-    console.log(`[v0] Total sources fetched: ${allSources.length}`)
+              // Check if source already exists
+              const existingSource = await (prisma as any).source.findUnique({
+                where: { sourceId: apiSource.source_id },
+              })
 
-    // Fetch persons data - DISABLED (not needed, was causing performance issues)
-    /*
-    console.log("[v0] Fetching persons data...")
-    let allPersons: any[] = []
-    let currentPersonPage = 1
-    const personPageSize = 1000
+              if (existingSource) {
+                console.log(`[v0] Updating existing source: ${apiSource.source_id}`)
+                // Update existing source
+                await (prisma as any).source.update({
+                  where: { sourceId: apiSource.source_id },
+                  data: {
+                    name: apiSource.name,
+                    platform: apiSource.platform,
+                    url: apiSource.url,
+                    description: apiSource.description,
+                    category: apiSource.category,
+                    isActive: apiSource.is_active,
+                    updatedAt: apiSource.updated_at,
+                  },
+                })
+              } else {
+                console.log(`[v0] Creating new source: ${apiSource.source_id}`)
+                // Create new source
+                await (prisma as any).source.create({
+                  data: {
+                    sourceId: apiSource.source_id,
+                    name: apiSource.name,
+                    platform: apiSource.platform,
+                    url: apiSource.url,
+                    description: apiSource.description,
+                    category: apiSource.category,
+                    isActive: apiSource.is_active,
+                    createdAt: apiSource.created_at,
+                    updatedAt: apiSource.updated_at,
+                  },
+                })
+              }
 
-    while (true) {
-      try {
-        console.log(`[v0] Fetching persons page ${currentPersonPage}...`)
-        const urlObj = new URL(PERSONS_API_URL)
-        urlObj.searchParams.set("page", String(currentPersonPage))
-        urlObj.searchParams.set("page_size", String(personPageSize))
-
-        const url = urlObj.toString()
-        const response = await getWithAuth(url, 30000)
-        const data = response.data
-
-        // API returns 'users' array
-        const pagePersons = Array.isArray(data.users) ? data.users : []
-
-        if (pagePersons.length === 0) {
-          console.log(`[v0] Persons page ${currentPersonPage} returned 0 items.`)
-          break
-        }
-
-        allPersons = allPersons.concat(pagePersons)
-        console.log(`[v0] Fetched ${pagePersons.length} persons from page ${currentPersonPage}`)
-
-        // Pagination logic
-        if (typeof data.current_page === 'number' && typeof data.total_pages === 'number') {
-          if (data.current_page < data.total_pages) {
-            currentPersonPage++
-          } else {
-            break
+              sourcesProcessed++
+              console.log(`[v0] Successfully processed source ${sourcesProcessed}/${transformedSources.length}`)
+            } catch (error) {
+              console.error(`[v0] Error processing source ${apiSource.source_id}:`, error)
+              console.error(`[v0] Source data:`, JSON.stringify(apiSource, null, 2))
+            }
           }
-        } else if (data.next) {
-          currentPersonPage++
-        } else {
-          break
-        }
 
-        await new Promise(resolve => setTimeout(resolve, 100))
-      } catch (error) {
-        console.error(`[v0] Error fetching persons page ${currentPersonPage}:`, error)
-        break
-      }
-    }
-    console.log(`[v0] Total persons fetched: ${allPersons.length}`)
-    */
-    console.log("[v0] Persons fetching disabled (not needed)")
+          // Process persons - DISABLED (persons fetching is disabled)
+          /*
+          console.log("[v0] Processing persons...")
+          let personsProcessed = 0
+          for (const person of allPersons) {
+            try {
+              if (!person.id) continue
+      
+              const personData = {
+                externalId: String(person.id),
+                name: person.name || "Unknown",
+                profileUrl: person.profile_url,
+                proPic: person.pro_pic,
+                commentTime: person.comment_time ? new Date(person.comment_time) : null,
+                mostTalkedTopic: person.most_talked_topic,
+                sentiment: person.sentiment,
+                count: typeof person.count === 'number' ? person.count : 0,
+              }
+      
+              await (prisma as any).person.upsert({
+                where: { externalId: personData.externalId },
+                update: {
+                  name: personData.name,
+                  profileUrl: personData.profileUrl,
+                  proPic: personData.proPic,
+                  commentTime: personData.commentTime,
+                  mostTalkedTopic: personData.mostTalkedTopic,
+                  sentiment: personData.sentiment,
+                  count: personData.count,
+                },
+                create: personData
+              })
+              personsProcessed++
+            } catch (error) {
+              console.error(`[v0] Error processing person ${person.id}:`, error)
+            }
+          }
+          console.log(`[v0] Successfully processed ${personsProcessed} persons`)
+          */
+          console.log("[v0] Persons processing disabled (not needed)")
 
-    console.log(`[v0] Total sources fetched: ${allSources.length}`)
+          // Create news items from posts
+          console.log("[v0] Creating news items...")
 
-    // Transform external API format to internal format
-    const transformedPosts = allPosts.map(transformExternalPost)
-    const transformedSources = allSources.map(transformExternalSource)
-
-    // Debug: Log a few transformed posts to see the structure
-    console.log("[v0] Sample transformed post:", JSON.stringify(transformedPosts[0], null, 2))
-
-    let postsProcessed = 0
-    let newsItemsCreated = 0
-    let newsItemsUpdated = 0
-    let sourcesProcessed = 0
-
-    // Process each post
-    for (const apiPost of transformedPosts) {
-      try {
-        console.log(`[v0] Processing post: ${apiPost.post_id} - ${apiPost.post_text.substring(0, 50)}...`)
-
-        // Validate required fields
-        if (!apiPost.post_id) {
-          console.log(`[v0] Skipping post with missing post_id`)
-          continue
-        }
-
-        // Fallback text to avoid skipping posts entirely
-        if (!apiPost.post_text || apiPost.post_text.trim().length === 0) {
-          apiPost.post_text = `[No text] ${apiPost.source || ''}`.trim()
-        }
-        // Ensure postId is always a string
-        const postIdString = String(apiPost.post_id)
-
-        // Check if post already exists
-        const existingPost = await prisma.post.findFirst({
-          where: {
-            postId: postIdString,
-          },
-        })
-
-        if (existingPost) {
-          console.log(`[v0] Updating existing post: ${postIdString}`)
-          // Update existing post
-          await prisma.post.update({
-            where: {
-              id: existingPost.id,
-            },
-            data: {
-              postText: apiPost.post_text,
-              postDate: apiPost.post_date,
-              postLink: apiPost.post_link,
-              platform: apiPost.platform,
-              source: apiPost.source,
-              category: apiPost.category,
-              reactions: apiPost.reactions,
-              shares: apiPost.shares,
-              comments: apiPost.comments,
-              sentiment: apiPost.sentiment,
-              featuredImagesPath: apiPost.featured_images_path,
-              trendingScore: calculateTrendingScore(apiPost.reactions, apiPost.shares, apiPost.comments, apiPost.post_date),
-            },
+          // Get all posts for analysis
+          const dbPosts = await prisma.post.findMany({
+            orderBy: { postDate: 'desc' },
+            take: 1000, // Limit to recent posts for performance
           })
-        } else {
-          console.log(`[v0] Creating new post: ${postIdString}`)
-          // Create new post
-          await prisma.post.create({
-            data: {
-              postId: postIdString,
-              postText: apiPost.post_text,
-              postDate: apiPost.post_date,
-              postLink: apiPost.post_link,
-              platform: apiPost.platform,
-              source: apiPost.source,
-              category: apiPost.category,
-              reactions: apiPost.reactions,
-              shares: apiPost.shares,
-              comments: apiPost.comments,
-              sentiment: apiPost.sentiment,
-              featuredImagesPath: apiPost.featured_images_path,
-              trendingScore: calculateTrendingScore(apiPost.reactions, apiPost.shares, apiPost.comments, apiPost.post_date),
-              baseKey: apiPost.post_text.substring(0, 100), // Simple base key
-              groupKey: `${apiPost.source}_${apiPost.category || 'uncategorized'}_${apiPost.post_date.toISOString().split('T')[0]}`, // Group by source + category + date
-            },
-          })
+
+          // Group posts by content similarity and source/category
+          const newsGroups: Array<{
+            baseKey: string
+            category: string
+            sources: Set<string>
+            platforms: Set<string>
+            posts: Array<{
+              id: string
+              postText: string
+              source: string
+              platform: string
+              postDate: Date
+              reactions: number
+              shares: number
+              comments: number
+              trendingScore: number
+              sentiment: string
+              postLink: string | null
+              category: string | null
+            }>
+            totalReactions: number
+            totalShares: number
+            totalComments: number
+            avgTrendingScore: number
+            firstPostDate: Date
+            lastPostDate: Date
+          }> = []
+
+          // Process each post to find similar content
+          for (const post of dbPosts) {
+            let addedToGroup = false
+
+            // Check if post can be added to existing group
+            for (const group of newsGroups) {
+              const similarity = calculateJaccardSimilarity(post.postText, group.posts[0].postText)
+
+              const len1 = post.postText.length
+              const len2 = group.posts[0].postText.length
+              const ratio = len1 > len2 ? len2 / len1 : len1 / len2
+
+              // If similar content (threshold 0.45) and similar length (>0.5 ratio) and same category, add to group
+              if (ratio >= 0.5 && similarity >= 0.45 && (post.category || 'uncategorized') === group.category) {
+                group.posts.push({
+                  id: post.id,
+                  postText: post.postText,
+                  source: post.source,
+                  platform: post.platform,
+                  postDate: post.postDate,
+                  reactions: post.reactions,
+                  shares: post.shares,
+                  comments: post.comments,
+                  trendingScore: post.trendingScore,
+                  sentiment: post.sentiment || 'neutral',
+                  postLink: post.postLink,
+                  category: post.category,
+                })
+                group.sources.add(post.source)
+                group.platforms.add(post.platform)
+                group.totalReactions += post.reactions
+                group.totalShares += post.shares
+                group.totalComments += post.comments
+                group.avgTrendingScore = (group.avgTrendingScore + post.trendingScore) / 2
+                group.firstPostDate = new Date(Math.min(group.firstPostDate.getTime(), post.postDate.getTime()))
+                group.lastPostDate = new Date(Math.max(group.lastPostDate.getTime(), post.postDate.getTime()))
+                addedToGroup = true
+                break
+              }
+            }
+
+            // If no similar group found, create new group
+            if (!addedToGroup) {
+              const baseKey = generateBaseKey(post.postText)
+              newsGroups.push({
+                baseKey,
+                category: post.category || 'uncategorized',
+                sources: new Set([post.source]),
+                platforms: new Set([post.platform]),
+                posts: [{
+                  id: post.id,
+                  postText: post.postText,
+                  source: post.source,
+                  platform: post.platform,
+                  postDate: post.postDate,
+                  reactions: post.reactions,
+                  shares: post.shares,
+                  comments: post.comments,
+                  trendingScore: post.trendingScore,
+                  sentiment: post.sentiment || 'neutral',
+                  postLink: post.postLink,
+                  category: post.category,
+                }],
+                totalReactions: post.reactions,
+                totalShares: post.shares,
+                totalComments: post.comments,
+                avgTrendingScore: post.trendingScore,
+                firstPostDate: post.postDate,
+                lastPostDate: post.postDate,
+              })
+            }
+          }
+
+          for (const group of newsGroups) {
+            try {
+              const posts = group.posts
+              const sources = Array.from(group.sources)
+              const platforms = Array.from(group.platforms)
+
+              if (posts.length === 0) continue
+
+              const totalReactions = group.totalReactions
+              const totalShares = group.totalShares
+              const totalComments = group.totalComments
+              const avgTrendingScore = group.avgTrendingScore
+              const firstPostDate = group.firstPostDate
+              const lastPostDate = group.lastPostDate
+
+              const groupKey = `${group.baseKey}_${firstPostDate.toISOString().split('T')[0]}`
+
+              // Create or update news item
+              const newsItem = await prisma.newsItem.upsert({
+                where: {
+                  groupKey: groupKey,
+                },
+                create: {
+                  groupKey: groupKey,
+                  category: group.category || 'uncategorized',
+                  primarySource: sources[0],
+                  primaryPlatform: platforms[0],
+                  totalReactions,
+                  totalShares,
+                  totalComments,
+                  sourceCount: sources.length,
+                  platformCount: platforms.length,
+                  postCount: posts.length,
+                  avgTrendingScore,
+                  firstPostDate,
+                  lastPostDate,
+                  postAnalysisJson: JSON.stringify({
+                    sources: sources,
+                    platforms: platforms,
+                    sampleTexts: posts.slice(0, 3).map(p => p.postText),
+                    postLinks: posts.map(p => p.postLink).filter(Boolean),
+                    totalEngagement: totalReactions + totalShares + totalComments,
+                    sentimentBreakdown: {
+                      positive: posts.filter(p => p.sentiment === "positive").length,
+                      neutral: posts.filter(p => p.sentiment === "neutral").length,
+                      negative: posts.filter(p => p.sentiment === "negative").length,
+                    },
+                  }),
+                },
+                update: {
+                  totalReactions,
+                  totalShares,
+                  totalComments,
+                  postCount: posts.length,
+                  avgTrendingScore,
+                  lastPostDate,
+                  postAnalysisJson: JSON.stringify({
+                    sources: sources,
+                    platforms: platforms,
+                    sampleTexts: posts.slice(0, 3).map(p => p.postText),
+                    postLinks: posts.map(p => p.postLink).filter(Boolean),
+                    totalEngagement: totalReactions + totalShares + totalComments,
+                    sentimentBreakdown: {
+                      positive: posts.filter(p => p.sentiment === "neutral").length,
+                      neutral: posts.filter(p => p.sentiment === "neutral").length,
+                      negative: posts.filter(p => p.sentiment === "negative").length,
+                    },
+                  }),
+                },
+              })
+
+              // Link all posts in this group to the news item
+              await prisma.post.updateMany({
+                where: {
+                  id: { in: posts.map(p => p.id) },
+                },
+                data: {
+                  newsItemId: newsItem.id,
+                },
+              })
+
+              newsItemsCreated++
+            } catch (error) {
+              console.error(`[v0] Error creating news item for ${group.baseKey}:`, error)
+            }
+          }
+
+          console.log(
+            `[v0] Data ingestion completed: ${postsProcessed} posts processed, ${sourcesProcessed} sources processed, ${newsItemsCreated} news items created`,
+          )
+
+        } catch (bgError) {
+          console.error("[v0] Background ingestion error:", bgError)
         }
-
-        postsProcessed++
-        console.log(`[v0] Successfully processed post ${postsProcessed}/${transformedPosts.length}`)
-      } catch (error) {
-        console.error(`[v0] Error processing post ${apiPost.post_id}:`, error)
-        console.error(`[v0] Post data:`, JSON.stringify(apiPost, null, 2))
-
-        // Check if it's a unique constraint error
-        if (error instanceof Error && error.message && error.message.includes('Unique constraint')) {
-          console.error(`[v0] Unique constraint violation for post ${apiPost.post_id}`)
-        }
-      }
-    }
-
-    // Process each source
-    console.log("[v0] Processing sources...")
-    for (const apiSource of transformedSources) {
-      try {
-        console.log(`[v0] Processing source: ${apiSource.source_id} - ${apiSource.name}`)
-
-        // Validate required fields
-        if (!apiSource.source_id) {
-          console.log(`[v0] Skipping source with missing source_id`)
-          continue
-        }
-
-        // Check if source already exists
-        const existingSource = await (prisma as any).source.findUnique({
-          where: { sourceId: apiSource.source_id },
-        })
-
-        if (existingSource) {
-          console.log(`[v0] Updating existing source: ${apiSource.source_id}`)
-          // Update existing source
-          await (prisma as any).source.update({
-            where: { sourceId: apiSource.source_id },
-            data: {
-              name: apiSource.name,
-              platform: apiSource.platform,
-              url: apiSource.url,
-              description: apiSource.description,
-              category: apiSource.category,
-              isActive: apiSource.is_active,
-              updatedAt: apiSource.updated_at,
-            },
-          })
-        } else {
-          console.log(`[v0] Creating new source: ${apiSource.source_id}`)
-          // Create new source
-          await (prisma as any).source.create({
-            data: {
-              sourceId: apiSource.source_id,
-              name: apiSource.name,
-              platform: apiSource.platform,
-              url: apiSource.url,
-              description: apiSource.description,
-              category: apiSource.category,
-              isActive: apiSource.is_active,
-              createdAt: apiSource.created_at,
-              updatedAt: apiSource.updated_at,
-            },
-          })
-        }
-
-        sourcesProcessed++
-        console.log(`[v0] Successfully processed source ${sourcesProcessed}/${transformedSources.length}`)
-      } catch (error) {
-        console.error(`[v0] Error processing source ${apiSource.source_id}:`, error)
-        console.error(`[v0] Source data:`, JSON.stringify(apiSource, null, 2))
-      }
-    }
-
-    // Process persons - DISABLED (persons fetching is disabled)
-    /*
-    console.log("[v0] Processing persons...")
-    let personsProcessed = 0
-    for (const person of allPersons) {
-      try {
-        if (!person.id) continue
-
-        const personData = {
-          externalId: String(person.id),
-          name: person.name || "Unknown",
-          profileUrl: person.profile_url,
-          proPic: person.pro_pic,
-          commentTime: person.comment_time ? new Date(person.comment_time) : null,
-          mostTalkedTopic: person.most_talked_topic,
-          sentiment: person.sentiment,
-          count: typeof person.count === 'number' ? person.count : 0,
-        }
-
-        await (prisma as any).person.upsert({
-          where: { externalId: personData.externalId },
-          update: {
-            name: personData.name,
-            profileUrl: personData.profileUrl,
-            proPic: personData.proPic,
-            commentTime: personData.commentTime,
-            mostTalkedTopic: personData.mostTalkedTopic,
-            sentiment: personData.sentiment,
-            count: personData.count,
-          },
-          create: personData
-        })
-        personsProcessed++
-      } catch (error) {
-        console.error(`[v0] Error processing person ${person.id}:`, error)
-      }
-    }
-    console.log(`[v0] Successfully processed ${personsProcessed} persons`)
-    */
-    console.log("[v0] Persons processing disabled (not needed)")
-
-    // Create news items from posts
-    console.log("[v0] Creating news items...")
-
-    // Get all posts for analysis
-    const dbPosts = await prisma.post.findMany({
-      orderBy: { postDate: 'desc' },
-      take: 1000, // Limit to recent posts for performance
-    })
-
-    // Group posts by content similarity and source/category
-    const newsGroups: Array<{
-      baseKey: string
-      category: string
-      sources: Set<string>
-      platforms: Set<string>
-      posts: Array<{
-        id: string
-        postText: string
-        source: string
-        platform: string
-        postDate: Date
-        reactions: number
-        shares: number
-        comments: number
-        trendingScore: number
-        sentiment: string
-        postLink: string | null
-        category: string | null
-      }>
-      totalReactions: number
-      totalShares: number
-      totalComments: number
-      avgTrendingScore: number
-      firstPostDate: Date
-      lastPostDate: Date
-    }> = []
-
-    // Process each post to find similar content
-    for (const post of dbPosts) {
-      let addedToGroup = false
-
-      // Check if post can be added to existing group
-      for (const group of newsGroups) {
-        const similarity = calculateJaccardSimilarity(post.postText, group.posts[0].postText)
-
-        const len1 = post.postText.length
-        const len2 = group.posts[0].postText.length
-        const ratio = len1 > len2 ? len2 / len1 : len1 / len2
-
-        // If similar content (threshold 0.45) and similar length (>0.5 ratio) and same category, add to group
-        if (ratio >= 0.5 && similarity >= 0.45 && (post.category || 'uncategorized') === group.category) {
-          group.posts.push({
-            id: post.id,
-            postText: post.postText,
-            source: post.source,
-            platform: post.platform,
-            postDate: post.postDate,
-            reactions: post.reactions,
-            shares: post.shares,
-            comments: post.comments,
-            trendingScore: post.trendingScore,
-            sentiment: post.sentiment || 'neutral',
-            postLink: post.postLink,
-            category: post.category,
-          })
-          group.sources.add(post.source)
-          group.platforms.add(post.platform)
-          group.totalReactions += post.reactions
-          group.totalShares += post.shares
-          group.totalComments += post.comments
-          group.avgTrendingScore = (group.avgTrendingScore + post.trendingScore) / 2
-          group.firstPostDate = new Date(Math.min(group.firstPostDate.getTime(), post.postDate.getTime()))
-          group.lastPostDate = new Date(Math.max(group.lastPostDate.getTime(), post.postDate.getTime()))
-          addedToGroup = true
-          break
-        }
-      }
-
-      // If no similar group found, create new group
-      if (!addedToGroup) {
-        const baseKey = generateBaseKey(post.postText)
-        newsGroups.push({
-          baseKey,
-          category: post.category || 'uncategorized',
-          sources: new Set([post.source]),
-          platforms: new Set([post.platform]),
-          posts: [{
-            id: post.id,
-            postText: post.postText,
-            source: post.source,
-            platform: post.platform,
-            postDate: post.postDate,
-            reactions: post.reactions,
-            shares: post.shares,
-            comments: post.comments,
-            trendingScore: post.trendingScore,
-            sentiment: post.sentiment || 'neutral',
-            postLink: post.postLink,
-            category: post.category,
-          }],
-          totalReactions: post.reactions,
-          totalShares: post.shares,
-          totalComments: post.comments,
-          avgTrendingScore: post.trendingScore,
-          firstPostDate: post.postDate,
-          lastPostDate: post.postDate,
-        })
-      }
-    }
-
-    for (const group of newsGroups) {
-      try {
-        const posts = group.posts
-        const sources = Array.from(group.sources)
-        const platforms = Array.from(group.platforms)
-
-        if (posts.length === 0) continue
-
-        const totalReactions = group.totalReactions
-        const totalShares = group.totalShares
-        const totalComments = group.totalComments
-        const avgTrendingScore = group.avgTrendingScore
-        const firstPostDate = group.firstPostDate
-        const lastPostDate = group.lastPostDate
-
-        const groupKey = `${group.baseKey}_${firstPostDate.toISOString().split('T')[0]}`
-
-        // Create or update news item
-        const newsItem = await prisma.newsItem.upsert({
-          where: {
-            groupKey: groupKey,
-          },
-          create: {
-            groupKey: groupKey,
-            category: group.category || 'uncategorized',
-            primarySource: sources[0],
-            primaryPlatform: platforms[0],
-            totalReactions,
-            totalShares,
-            totalComments,
-            sourceCount: sources.length,
-            platformCount: platforms.length,
-            postCount: posts.length,
-            avgTrendingScore,
-            firstPostDate,
-            lastPostDate,
-            postAnalysisJson: JSON.stringify({
-              sources: sources,
-              platforms: platforms,
-              sampleTexts: posts.slice(0, 3).map(p => p.postText),
-              postLinks: posts.map(p => p.postLink).filter(Boolean),
-              totalEngagement: totalReactions + totalShares + totalComments,
-              sentimentBreakdown: {
-                positive: posts.filter(p => p.sentiment === "positive").length,
-                neutral: posts.filter(p => p.sentiment === "neutral").length,
-                negative: posts.filter(p => p.sentiment === "negative").length,
-              },
-            }),
-          },
-          update: {
-            totalReactions,
-            totalShares,
-            totalComments,
-            postCount: posts.length,
-            avgTrendingScore,
-            lastPostDate,
-            postAnalysisJson: JSON.stringify({
-              sources: sources,
-              platforms: platforms,
-              sampleTexts: posts.slice(0, 3).map(p => p.postText),
-              postLinks: posts.map(p => p.postLink).filter(Boolean),
-              totalEngagement: totalReactions + totalShares + totalComments,
-              sentimentBreakdown: {
-                positive: posts.filter(p => p.sentiment === "neutral").length,
-                neutral: posts.filter(p => p.sentiment === "neutral").length,
-                negative: posts.filter(p => p.sentiment === "negative").length,
-              },
-            }),
-          },
-        })
-
-        // Link all posts in this group to the news item
-        await prisma.post.updateMany({
-          where: {
-            id: { in: posts.map(p => p.id) },
-          },
-          data: {
-            newsItemId: newsItem.id,
-          },
-        })
-
-        newsItemsCreated++
-      } catch (error) {
-        console.error(`[v0] Error creating news item for ${group.baseKey}:`, error)
-      }
-    }
-
-    console.log(
-      `[v0] Data ingestion completed: ${postsProcessed} posts processed, ${sourcesProcessed} sources processed, ${newsItemsCreated} news items created`,
-    )
+      })()
 
     return NextResponse.json({
       success: true,
-      message: "Data ingested and stored successfully",
-      data: {
-        postsProcessed,
-        sourcesProcessed,
-        newsItemsCreated,
-        totalPosts: transformedPosts.length,
-        totalSources: transformedSources.length,
-      }
+      message: "Data ingestion started in background",
+      status: "processing"
     })
 
   } catch (error) {

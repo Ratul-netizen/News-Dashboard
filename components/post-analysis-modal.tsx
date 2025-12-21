@@ -33,9 +33,12 @@ import {
   Smile,
   Meh,
   Frown,
+  Network,
 } from "lucide-react"
 import type { PostAnalysis } from "@/lib/types"
 import dayjs from "dayjs"
+import { SourcePlatformGraphModal } from "./analysis/source-platform-graph-modal"
+import { SourcePlatformGraphPreview } from "./analysis/source-platform-graph-preview"
 
 interface NewsItemDetails {
   newsItem: {
@@ -93,6 +96,7 @@ const ENGAGEMENT_COLORS = {
 export function PostAnalysisModal({ isOpen, onClose, postId }: PostAnalysisModalProps) {
   const [data, setData] = useState<NewsItemDetails | null>(null)
   const [loading, setLoading] = useState(false)
+  const [graphModalOpen, setGraphModalOpen] = useState(false)
 
   // Calculate sentiment breakdown from posts data
   const getSentimentData = (posts: any[]) => {
@@ -184,7 +188,8 @@ export function PostAnalysisModal({ isOpen, onClose, postId }: PostAnalysisModal
   if (!data && !loading) return null
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[90vh] bg-gray-900 border-gray-800 text-white">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Post Analysis Details</DialogTitle>
@@ -422,6 +427,14 @@ export function PostAnalysisModal({ isOpen, onClose, postId }: PostAnalysisModal
 
               <Separator className="bg-gray-700" />
 
+              {/* Advanced Analysis Graphs */}
+              <SourcePlatformGraphPreview
+                posts={data.posts}
+                onOpenFullGraph={() => setGraphModalOpen(true)}
+              />
+
+              <Separator className="bg-gray-700" />
+
               {/* Detailed Posts Table */}
               <Card className="bg-gray-800 border-gray-700">
                 <CardHeader>
@@ -514,7 +527,16 @@ export function PostAnalysisModal({ isOpen, onClose, postId }: PostAnalysisModal
             <div className="text-gray-400">Failed to load analysis data</div>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+
+        </DialogContent>
+      </Dialog>
+
+      {/* Source-Platform Graph Modal */}
+      <SourcePlatformGraphModal
+        isOpen={graphModalOpen}
+        onClose={() => setGraphModalOpen(false)}
+        posts={data?.posts || []}
+      />
+    </>
   )
 }
