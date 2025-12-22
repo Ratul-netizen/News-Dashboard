@@ -184,12 +184,12 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     const masterNodeX = 850
     
     // Calculate vertical spacing for perfect alignment
-    // Use the maximum count to ensure all columns align properly
-    const maxNodeCount = Math.max(uniqueSources.length, uniquePlatforms.length, 1)
+    // Use independent spacing per column to avoid cross-column skew
     const topMargin = 100
     const bottomMargin = 100
     const availableHeight = svgHeight - topMargin - bottomMargin
-    const verticalSpacing = maxNodeCount > 1 ? availableHeight / (maxNodeCount - 1) : 0
+    const sourceSpacing = uniqueSources.length > 1 ? availableHeight / (uniqueSources.length - 1) : 0
+    const platformSpacing = uniquePlatforms.length > 1 ? availableHeight / (uniquePlatforms.length - 1) : 0
     const startY = topMargin
 
     // Position master node at the right side, vertically centered with platforms
@@ -199,7 +199,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
         masterNode.x = masterNodeX
         // Align master node vertically with the middle of the platform column
         const platformMiddleIndex = (uniquePlatforms.length - 1) / 2
-        masterNode.y = startY + (platformMiddleIndex * verticalSpacing)
+        masterNode.y = startY + (platformMiddleIndex * platformSpacing)
       }
     }
 
@@ -208,7 +208,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
       const node = graphNodes.find(n => n.id === `source-${index}`)
       if (node) {
         node.x = sourceColumnX
-        node.y = startY + (index * verticalSpacing)
+        node.y = startY + (index * sourceSpacing)
       }
     })
 
@@ -217,7 +217,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
       const node = graphNodes.find(n => n.id === `platform-${index}`)
       if (node) {
         node.x = platformColumnX
-        node.y = startY + (index * verticalSpacing)
+        node.y = startY + (index * platformSpacing)
       }
     })
 
@@ -247,13 +247,28 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     }
   }
 
-  // Calculate point on circle edge for line connection
+  const getNodeRadius = useCallback((node: GraphNode) => {
+    return node.type === 'master' ? 35 : node.type === 'source' ? 25 : 20
+  }, [])
+
+  const getHorizontalAnchor = useCallback((node: GraphNode, side: 'left' | 'right') => {
+    if (node.x === undefined || node.y === undefined) {
+      return { x: node.x || 0, y: node.y || 0 }
+    }
+
+    const radius = getNodeRadius(node)
+    return {
+      x: node.x + (side === 'right' ? radius : -radius),
+      y: node.y
+    }
+  }, [getNodeRadius])
+
+  // Calculate point on circle edge for line connection (fallback radial)
   const getCircleEdgePoint = useCallback((node: GraphNode, targetNode: GraphNode) => {
     if (!node.x || !node.y || !targetNode.x || !targetNode.y) {
       return { x: node.x || 0, y: node.y || 0 }
     }
-    
-    const radius = node.type === 'master' ? 35 : node.type === 'source' ? 25 : 20
+    const radius = getNodeRadius(node)
     const dx = targetNode.x - (node.x || 0)
     const dy = targetNode.y - (node.y || 0)
     const distance = Math.sqrt(dx * dx + dy * dy)
@@ -276,7 +291,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
       x: (node.x || 0) + normalizedDx * radius,
       y: (node.y || 0) + normalizedDy * radius
     }
-  }, [])
+  }, [getNodeRadius])
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
@@ -497,8 +512,15 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                       }
 
                       // Calculate edge points on circles - ensure they're on the perimeter
-                      const startPoint = getCircleEdgePoint(fromNode, toNode)
-                      const endPoint = getCircleEdgePoint(toNode, fromNode)
+                      const isSourceToPlatform = fromNode.type === 'source' && toNode.type === 'platform'
+                      const isPlatformToMaster = fromNode.type === 'platform' && toNode.type === 'master'
+
+                      const startPoint = (isSourceToPlatform || isPlatformToMaster)
+                        ? getHorizontalAnchor(fromNode, 'right')
+                        : getCircleEdgePoint(fromNode, toNode)
+                      const endPoint = (isSourceToPlatform || isPlatformToMaster)
+                        ? getHorizontalAnchor(toNode, 'left')
+                        : getCircleEdgePoint(toNode, fromNode)
 
                       return (
                         <TooltipProvider key={`edge-${index}`}>
