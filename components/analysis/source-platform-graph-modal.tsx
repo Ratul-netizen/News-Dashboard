@@ -177,9 +177,9 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     })
 
     // Position nodes in bipartite layout with perfect vertical alignment
-    // Use responsive dimensions that fit within container
-    const svgWidth = 1000
-    const svgHeight = 700
+    // Use a larger virtual canvas to keep all nodes reachable
+    const svgWidth = 2000
+    const svgHeight = 1600
     
     // Fixed X positions for perfect column alignment
     const sourceColumnX = 150
@@ -521,8 +521,8 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
             {/* Graph Visualization */}
             <div
               ref={containerRef}
-              className="bg-gray-950 rounded-lg overflow-hidden border border-gray-700 relative shadow-inner"
-              style={{ height: '600px', maxWidth: '100%' }}
+              className="bg-gray-950 rounded-lg border border-gray-700 relative shadow-inner"
+              style={{ height: '600px', maxWidth: '100%', overflow: 'auto' }}
             >
               <div
                 className="overflow-auto w-full h-full scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
@@ -531,8 +531,8 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
               >
                 <svg
                   ref={svgRef}
-                  width="1000"
-                  height="700"
+                  width="2000"
+                  height="1600"
                   className="block"
                   style={{
                     transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
@@ -542,7 +542,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                     maxWidth: '100%'
                   }}
                   onMouseDown={handleMouseDown}
-                  viewBox="0 0 1000 700"
+                  viewBox="0 0 2000 1600"
                   preserveAspectRatio="xMidYMid meet"
                 >
                   {/* Background Grid */}
@@ -551,8 +551,8 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                       <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1F2937" strokeWidth="0.8" opacity="0.5" />
                     </pattern>
                   </defs>
-                  <rect width="1000" height="700" fill="#0A0A0A" />
-                  <rect width="1000" height="700" fill="url(#grid)" opacity="0.3" />
+                  <rect width="2000" height="1600" fill="#0A0A0A" />
+                  <rect width="2000" height="1600" fill="url(#grid)" opacity="0.3" />
 
                   {/* Edges (basic connections, no weights) - Connect from edge to edge */}
                   <g id="edges">
