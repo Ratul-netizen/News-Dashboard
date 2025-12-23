@@ -13,7 +13,7 @@ import dayjs from 'dayjs'
 interface GraphNode {
   id: string
   label: string
-  type: 'source' | 'platform' | 'master'
+  type: 'source' | 'platform' | 'master' | 'post'
   x?: number
   y?: number
   data?: {
@@ -89,6 +89,9 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [selectedSource, setSelectedSource] = useState<any | null>(null)
   const [showPostsModal, setShowPostsModal] = useState(false)
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null)
+  const [showPostModal, setShowPostModal] = useState(false)
+  const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({})
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
@@ -97,9 +100,9 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Generate basic graph data (no weights or scores)
-  const { nodes, edges } = useMemo(() => {
+  const { baseNodes, baseEdges } = useMemo(() => {
     if (!posts || posts.length === 0) {
-      return { nodes: [], edges: [] }
+      return { baseNodes: [], baseEdges: [] }
     }
 
     const graphNodes: GraphNode[] = []
@@ -188,7 +191,8 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     const topMargin = 100
     const bottomMargin = 100
     const availableHeight = svgHeight - topMargin - bottomMargin
-    const sourceSpacing = uniqueSources.length > 1 ? availableHeight / (uniqueSources.length - 1) : 0
+    const sourceSpacingBase = uniqueSources.length > 1 ? availableHeight / (uniqueSources.length - 1) : 0
+    const sourceSpacing = Math.max(sourceSpacingBase, 56)
     const platformSpacing = uniquePlatforms.length > 1 ? availableHeight / (uniquePlatforms.length - 1) : 0
     const startY = topMargin
 
@@ -221,20 +225,65 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
       }
     })
 
-    return { nodes: graphNodes, edges: graphEdges }
+    return { baseNodes: graphNodes, baseEdges: graphEdges }
   }, [posts, mainPost])
+
+  // Inject post sub-nodes for expanded sources without altering base layout
+  const { nodes, edges } = useMemo(() => {
+    const allNodes = [...baseNodes]
+    const allEdges = [...baseEdges]
+
+    Object.entries(expandedSources).forEach(([sourceId, isExpanded]) => {
+      if (!isExpanded) return
+      const sourceNode = allNodes.find(n => n.id === sourceId)
+      if (!sourceNode || !sourceNode.data?.posts) return
+
+      const postsToShow = sourceNode.data.posts.slice(0, 5)
+      const POST_X_OFFSET = 95
+      const POST_Y_GAP = 44
+      const MIN_X = 30
+
+      const baseX = Math.max((sourceNode.x || 0) - POST_X_OFFSET, MIN_X)
+      const startY = (sourceNode.y || 0) - ((postsToShow.length - 1) * POST_Y_GAP) / 2
+
+      postsToShow.forEach((post: Post, idx: number) => {
+        const postX = baseX
+        const postY = startY + idx * POST_Y_GAP
+        const postNode: GraphNode = {
+          id: `${sourceId}-post-${idx}`,
+          label: post.postText ? post.postText.slice(0, 14) + (post.postText.length > 14 ? '…' : '') : `Post ${idx + 1}`,
+          type: 'post',
+          x: postX,
+          y: postY,
+          data: { posts: [post], name: post.postText || `Post ${idx + 1}`, platform: post.platform, sentiment: post.sentiment }
+        }
+        allNodes.push(postNode)
+        allEdges.push({ from: sourceId, to: postNode.id })
+      })
+    })
+
+    return { nodes: allNodes, edges: allEdges }
+  }, [baseNodes, baseEdges, expandedSources])
 
   const handleNodeClick = (node: GraphNode) => {
     setSelectedNode(node)
 
-    // If it's a source node, show posts modal
+    if (node.type === 'post' && node.data?.posts?.[0]) {
+      setSelectedPost(node.data.posts[0])
+      setShowPostModal(true)
+      return
+    }
+
     if (node.type === 'source' && node.data?.posts) {
-      setSelectedSource({
-        source: node.data.name,
-        posts: node.data.posts,
-        engagement: node.data.posts.reduce((sum: number, p: Post) => sum + (p.reactions || 0) + (p.shares || 0) + (p.comments || 0), 0)
+      setExpandedSources(prev => {
+        // allow only one expanded source at a time
+        if (prev[node.id]) {
+          return {}
+        }
+        return { [node.id]: true }
       })
-      setShowPostsModal(true)
+      setSelectedSource(null)
+      setShowPostsModal(false)
     }
   }
 
@@ -248,7 +297,10 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
   }
 
   const getNodeRadius = useCallback((node: GraphNode) => {
-    return node.type === 'master' ? 35 : node.type === 'source' ? 25 : 20
+    if (node.type === 'master') return 35
+    if (node.type === 'source') return 18
+    if (node.type === 'platform') return 20
+    return 16
   }, [])
 
   const getHorizontalAnchor = useCallback((node: GraphNode, side: 'left' | 'right') => {
@@ -514,6 +566,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                       // Calculate edge points on circles - ensure they're on the perimeter
                       const isSourceToPlatform = fromNode.type === 'source' && toNode.type === 'platform'
                       const isPlatformToMaster = fromNode.type === 'platform' && toNode.type === 'master'
+                      const isPostEdge = fromNode.type === 'post' || toNode.type === 'post'
 
                       const startPoint = (isSourceToPlatform || isPlatformToMaster)
                         ? getHorizontalAnchor(fromNode, 'right')
@@ -531,15 +584,24 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                                 y1={startPoint.y}
                                 x2={endPoint.x}
                                 y2={endPoint.y}
-                                stroke={toNode.type === 'master' ? '#6B7280' : '#4B5563'}
-                                strokeWidth={toNode.type === 'master' ? '2.5' : '2'}
-                                opacity={toNode.type === 'master' ? '0.7' : '0.5'}
+                                stroke={isPostEdge ? '#9CA3AF' : toNode.type === 'master' ? '#6B7280' : '#4B5563'}
+                                strokeWidth={isPostEdge ? '1.2' : isSourceToPlatform ? '1.5' : toNode.type === 'master' ? '2.5' : '2'}
+                                opacity={
+                                  isPostEdge
+                                    ? '0.6'
+                                    : isSourceToPlatform
+                                      ? '0.22'
+                                      : toNode.type === 'master'
+                                        ? '0.7'
+                                        : '0.5'
+                                }
                                 className="cursor-pointer hover:stroke-blue-400 hover:opacity-100 transition-all"
                                 onClick={(e) => handleEdgeClick(edge, e)}
                                 style={{ 
                                   filter: 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.3))',
                                   transition: 'all 0.2s ease',
-                                  pointerEvents: 'stroke'
+                                  pointerEvents: 'stroke',
+                                  strokeDasharray: isPostEdge ? '4,3' : undefined
                                 }}
                               />
                             </TooltipTrigger>
@@ -567,11 +629,61 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                             <circle
                               cx={node.x}
                               cy={node.y}
-                              r={node.type === 'master' ? 35 : node.type === 'source' ? 25 : 20}
-                              fill={node.type === 'master' ? '#FFD700' : node.type === 'source' ? '#10B981' : getPlatformColor(node.label)}
-                              stroke={selectedNode?.id === node.id ? '#F59E0B' : node.type === 'master' ? '#FFA500' : '#2D3748'}
-                              strokeWidth={selectedNode?.id === node.id ? 3 : node.type === 'master' ? 2.5 : 2}
-                              className={node.type === 'master' ? 'hover:opacity-90 hover:stroke-yellow-400' : node.type === 'source' ? 'hover:fill-green-600 hover:stroke-green-400' : 'hover:opacity-90 hover:stroke-blue-400'}
+                              r={
+                                node.type === 'master'
+                                  ? 35
+                                  : node.type === 'source'
+                                    ? 18
+                                    : node.type === 'platform'
+                                      ? 20
+                                      : 16
+                              }
+                              fill={
+                                node.type === 'master'
+                                  ? '#FFD700'
+                                  : node.type === 'source'
+                                    ? '#10B981'
+                                    : node.type === 'platform'
+                                      ? getPlatformColor(node.label)
+                                      : getPlatformColor(node.data?.posts?.[0]?.platform || node.label)
+                              }
+                              stroke={
+                                node.type === 'post'
+                                  ? node.data?.posts?.[0]?.sentiment === 'positive'
+                                    ? '#22C55E'
+                                    : node.data?.posts?.[0]?.sentiment === 'negative'
+                                      ? '#EF4444'
+                                      : '#9CA3AF'
+                                  : selectedNode?.id === node.id
+                                    ? '#F59E0B'
+                                    : node.type === 'master'
+                                      ? '#FFA500'
+                                      : node.type === 'source'
+                                        ? '#2D3748'
+                                        : node.type === 'platform'
+                                          ? '#2D3748'
+                                          : '#4B5563'
+                              }
+                              strokeWidth={
+                                selectedNode?.id === node.id
+                                  ? 3
+                                  : node.type === 'master'
+                                    ? 2.5
+                                    : node.type === 'source'
+                                      ? 2
+                                      : node.type === 'platform'
+                                        ? 2
+                                        : 1.5
+                              }
+                              className={
+                                node.type === 'master'
+                                  ? 'hover:opacity-90 hover:stroke-yellow-400'
+                                  : node.type === 'source'
+                                    ? 'hover:fill-green-600 hover:stroke-green-400'
+                                    : node.type === 'platform'
+                                      ? 'hover:opacity-90 hover:stroke-blue-400'
+                                      : 'hover:opacity-90 hover:stroke-gray-500'
+                              }
                               style={{ filter: node.type === 'master' ? 'drop-shadow(0 0 8px rgba(255, 215, 0, 0.5))' : 'none' }}
                             />
                             {scale > 0.7 && (
@@ -580,8 +692,12 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                                   x={node.x}
                                   y={node.y}
                                   fill={node.type === 'master' ? '#000000' : 'white'}
-                                  fontSize={`${Math.min(12, Math.max(8, 12 * scale))}`}
-                                  fontWeight="bold"
+                                  fontSize={
+                                    node.type === 'post'
+                                      ? 12
+                                      : `${Math.min(12, Math.max(8, 12 * scale))}`
+                                  }
+                                  fontWeight={node.type === 'post' ? 500 : 'bold'}
                                   textAnchor="middle"
                                   dominantBaseline="middle"
                                   className="select-none pointer-events-none"
@@ -764,6 +880,76 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                   </div>
                 </div>
               ))}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post Detail Modal for Post Nodes */}
+      <Dialog open={showPostModal} onOpenChange={setShowPostModal}>
+        <DialogContent className="max-w-3xl max-h-[80vh] bg-gray-900 border-gray-800 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">
+              {selectedPost?.postText ? selectedPost.postText.slice(0, 60) + (selectedPost.postText.length > 60 ? '…' : '') : 'Post Details'}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              {selectedPost?.platform && <span className="mr-2">Platform: {selectedPost.platform}</span>}
+              {selectedPost?.source && <span>Source: {selectedPost.source}</span>}
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-4">
+              {selectedPost && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 space-y-3">
+                  <div className="text-sm text-gray-300 leading-relaxed">
+                    {selectedPost.postText}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+                    {selectedPost.platform && (
+                      <Badge variant="outline" className="border-purple-600 text-purple-300">
+                        {selectedPost.platform}
+                      </Badge>
+                    )}
+                    {selectedPost.source && (
+                      <Badge variant="outline" className="border-green-600 text-green-300">
+                        {selectedPost.source}
+                      </Badge>
+                    )}
+                    {selectedPost.sentiment && (
+                      <Badge
+                        variant="outline"
+                        className={
+                          selectedPost.sentiment === 'positive'
+                            ? 'border-green-600 text-green-400'
+                            : selectedPost.sentiment === 'negative'
+                              ? 'border-red-600 text-red-400'
+                              : 'border-gray-600 text-gray-400'
+                        }
+                      >
+                        {selectedPost.sentiment}
+                      </Badge>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      {selectedPost.postDate ? dayjs(selectedPost.postDate).format('MMM DD, YYYY [at] HH:mm') : 'Unknown date'}
+                    </div>
+                    {selectedPost.postLink && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                        className="h-7 px-2 text-blue-400 hover:text-white"
+                      >
+                        <a href={selectedPost.postLink} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-4 h-4 mr-1" />
+                          Open link
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </ScrollArea>
         </DialogContent>
