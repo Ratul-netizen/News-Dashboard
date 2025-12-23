@@ -180,12 +180,15 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     // Use a larger virtual canvas to keep all nodes reachable
     const svgWidth = 2000
     const svgHeight = 1600
-    
+
     // Fixed X positions for perfect column alignment
     const sourceColumnX = 150
     const platformColumnX = 500 // Center
     const masterNodeX = 850
-    
+    // --- Centering logic ---
+    const GRAPH_WIDTH = masterNodeX - sourceColumnX + 300 // safe padding
+    const GRAPH_OFFSET_X = (svgWidth - GRAPH_WIDTH) / 2
+
     // Calculate vertical spacing for perfect alignment
     // Use independent spacing per column to avoid cross-column skew
     const topMargin = 100
@@ -200,7 +203,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     if (mainPost) {
       const masterNode = graphNodes.find(n => n.id === 'master-0')
       if (masterNode) {
-        masterNode.x = masterNodeX
+        masterNode.x = masterNodeX + GRAPH_OFFSET_X
         // Align master node vertically with the middle of the platform column
         const platformMiddleIndex = (uniquePlatforms.length - 1) / 2
         masterNode.y = startY + (platformMiddleIndex * platformSpacing)
@@ -211,7 +214,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     uniqueSources.forEach((_, index) => {
       const node = graphNodes.find(n => n.id === `source-${index}`)
       if (node) {
-        node.x = sourceColumnX
+        node.x = sourceColumnX + GRAPH_OFFSET_X
         node.y = startY + (index * sourceSpacing)
       }
     })
@@ -220,7 +223,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     uniquePlatforms.forEach((_, index) => {
       const node = graphNodes.find(n => n.id === `platform-${index}`)
       if (node) {
-        node.x = platformColumnX
+        node.x = platformColumnX + GRAPH_OFFSET_X
         node.y = startY + (index * platformSpacing)
       }
     })
@@ -241,7 +244,13 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
       const postsToShow = sourceNode.data.posts.slice(0, 5)
       const POST_X_OFFSET = 95
       const POST_Y_GAP = 44
-      const MIN_X = 30
+      // Layout constants matching the graph generation
+      const sourceColumnX = 150
+      const masterNodeX = 850
+      const svgWidth = 2000
+      const GRAPH_WIDTH = masterNodeX - sourceColumnX + 300
+      const GRAPH_OFFSET_X = (svgWidth - GRAPH_WIDTH) / 2
+      const MIN_X = GRAPH_OFFSET_X + 20
 
       const baseX = Math.max((sourceNode.x || 0) - POST_X_OFFSET, MIN_X)
       const startY = (sourceNode.y || 0) - ((postsToShow.length - 1) * POST_Y_GAP) / 2
@@ -324,7 +333,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     const dx = targetNode.x - (node.x || 0)
     const dy = targetNode.y - (node.y || 0)
     const distance = Math.sqrt(dx * dx + dy * dy)
-    
+
     // If nodes are too close or overlapping, return edge point anyway
     if (distance === 0 || distance < radius) {
       // Return a point on the edge in a default direction
@@ -333,12 +342,12 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
         y: node.y || 0
       }
     }
-    
+
     // Calculate point on circle edge in direction of target
     // Normalize the direction vector and multiply by radius
     const normalizedDx = dx / distance
     const normalizedDy = dy / distance
-    
+
     return {
       x: (node.x || 0) + normalizedDx * radius,
       y: (node.y || 0) + normalizedDy * radius
@@ -381,7 +390,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     ) {
       return
     }
-    
+
     // Allow dragging on SVG background, grid, or empty space
     setIsDragging(true)
     setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y })
@@ -525,7 +534,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
               style={{ height: '600px', maxWidth: '100%', overflow: 'auto' }}
             >
               <div
-                className="overflow-auto w-full h-full scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+                className="w-full h-full scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
                 onWheel={handleWheel}
                 style={{ contain: 'layout style paint' }}
               >
@@ -535,233 +544,232 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                   height="1600"
                   className="block"
                   style={{
-                    transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                    transformOrigin: '0 0',
                     cursor: isDragging ? 'grabbing' : 'grab',
-                    minWidth: '100%',
-                    maxWidth: '100%'
                   }}
                   onMouseDown={handleMouseDown}
                   viewBox="0 0 2000 1600"
-                  preserveAspectRatio="xMidYMid meet"
+                  preserveAspectRatio="xMinYMin meet"
                 >
-                  {/* Background Grid */}
-                  <defs>
-                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1F2937" strokeWidth="0.8" opacity="0.5" />
-                    </pattern>
-                  </defs>
-                  <rect width="2000" height="1600" fill="#0A0A0A" />
-                  <rect width="2000" height="1600" fill="url(#grid)" opacity="0.3" />
+                  <g transform={`translate(${position.x}, ${position.y}) scale(${scale})`}>
+                    {useMemo(() => (
+                      <>
+                        {/* Background Grid */}
+                        <defs>
+                          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1F2937" strokeWidth="0.8" opacity="0.5" />
+                          </pattern>
+                        </defs>
+                        <rect width="2000" height="1600" fill="#0A0A0A" />
+                        <rect width="2000" height="1600" fill="url(#grid)" opacity="0.3" />
 
-                  {/* Edges (basic connections, no weights) - Connect from edge to edge */}
-                  <g id="edges">
-                    {edges.map((edge, index) => {
-                      const fromNode = nodes.find(n => n.id === edge.from)
-                      const toNode = nodes.find(n => n.id === edge.to)
-                      if (!fromNode || !toNode || fromNode.x === undefined || toNode.x === undefined || fromNode.y === undefined || toNode.y === undefined) {
-                        return null
-                      }
+                        {/* Edges */}
+                        <g id="edges">
+                          {edges.map((edge, index) => {
+                            const fromNode = nodes.find(n => n.id === edge.from)
+                            const toNode = nodes.find(n => n.id === edge.to)
+                            if (!fromNode || !toNode || fromNode.x === undefined || toNode.x === undefined || fromNode.y === undefined || toNode.y === undefined) {
+                              return null
+                            }
 
-                      // Calculate edge points on circles - ensure they're on the perimeter
-                      const isSourceToPlatform = fromNode.type === 'source' && toNode.type === 'platform'
-                      const isPlatformToMaster = fromNode.type === 'platform' && toNode.type === 'master'
-                      const isPostEdge = fromNode.type === 'post' || toNode.type === 'post'
+                            const isSourceToPlatform = fromNode.type === 'source' && toNode.type === 'platform'
+                            const isPlatformToMaster = fromNode.type === 'platform' && toNode.type === 'master'
+                            const isPostEdge = fromNode.type === 'post' || toNode.type === 'post'
 
-                      const startPoint = (isSourceToPlatform || isPlatformToMaster)
-                        ? getHorizontalAnchor(fromNode, 'right')
-                        : getCircleEdgePoint(fromNode, toNode)
-                      const endPoint = (isSourceToPlatform || isPlatformToMaster)
-                        ? getHorizontalAnchor(toNode, 'left')
-                        : getCircleEdgePoint(toNode, fromNode)
+                            const startPoint = (isSourceToPlatform || isPlatformToMaster)
+                              ? getHorizontalAnchor(fromNode, 'right')
+                              : getCircleEdgePoint(fromNode, toNode)
+                            const endPoint = (isSourceToPlatform || isPlatformToMaster)
+                              ? getHorizontalAnchor(toNode, 'left')
+                              : getCircleEdgePoint(toNode, fromNode)
 
-                      return (
-                        <TooltipProvider key={`edge-${index}`}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <line
-                                x1={startPoint.x}
-                                y1={startPoint.y}
-                                x2={endPoint.x}
-                                y2={endPoint.y}
-                                stroke={isPostEdge ? '#9CA3AF' : toNode.type === 'master' ? '#6B7280' : '#4B5563'}
-                                strokeWidth={isPostEdge ? '1.2' : isSourceToPlatform ? '1.5' : toNode.type === 'master' ? '2.5' : '2'}
-                                opacity={
-                                  isPostEdge
-                                    ? '0.6'
-                                    : isSourceToPlatform
-                                      ? '0.22'
-                                      : toNode.type === 'master'
-                                        ? '0.7'
-                                        : '0.5'
-                                }
-                                className="cursor-pointer hover:stroke-blue-400 hover:opacity-100 transition-all"
-                                onClick={(e) => handleEdgeClick(edge, e)}
-                                style={{ 
-                                  filter: 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.3))',
-                                  transition: 'all 0.2s ease',
-                                  pointerEvents: 'stroke',
-                                  strokeDasharray: isPostEdge ? '4,3' : undefined
-                                }}
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-sm">Connection: {fromNode.label} → {toNode.label}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )
-                    })}
-                  </g>
-
-                  {/* Nodes - rendered after edges so they appear on top */}
-                  <g id="nodes">
-                  {nodes.map((node) => (
-                    <TooltipProvider key={node.id}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <g
-                            onClick={() => handleNodeClick(node)}
-                            className={`cursor-pointer transition-all ${node.type === 'source' ? 'hover:opacity-80' : 'hover:opacity-60'
-                              } ${selectedNode?.id === node.id ? 'opacity-100' : ''}`}
-                            style={{ pointerEvents: 'auto' }}
-                          >
-                            <circle
-                              cx={node.x}
-                              cy={node.y}
-                              r={
-                                node.type === 'master'
-                                  ? 35
-                                  : node.type === 'source'
-                                    ? 18
-                                    : node.type === 'platform'
-                                      ? 20
-                                      : 16
-                              }
-                              fill={
-                                node.type === 'master'
-                                  ? '#FFD700'
-                                  : node.type === 'source'
-                                    ? '#10B981'
-                                    : node.type === 'platform'
-                                      ? getPlatformColor(node.label)
-                                      : getPlatformColor(node.data?.posts?.[0]?.platform || node.label)
-                              }
-                              stroke={
-                                node.type === 'post'
-                                  ? node.data?.posts?.[0]?.sentiment === 'positive'
-                                    ? '#22C55E'
-                                    : node.data?.posts?.[0]?.sentiment === 'negative'
-                                      ? '#EF4444'
-                                      : '#9CA3AF'
-                                  : selectedNode?.id === node.id
-                                    ? '#F59E0B'
-                                    : node.type === 'master'
-                                      ? '#FFA500'
-                                      : node.type === 'source'
-                                        ? '#2D3748'
-                                        : node.type === 'platform'
-                                          ? '#2D3748'
-                                          : '#4B5563'
-                              }
-                              strokeWidth={
-                                selectedNode?.id === node.id
-                                  ? 3
-                                  : node.type === 'master'
-                                    ? 2.5
-                                    : node.type === 'source'
-                                      ? 2
-                                      : node.type === 'platform'
-                                        ? 2
-                                        : 1.5
-                              }
-                              className={
-                                node.type === 'master'
-                                  ? 'hover:opacity-90 hover:stroke-yellow-400'
-                                  : node.type === 'source'
-                                    ? 'hover:fill-green-600 hover:stroke-green-400'
-                                    : node.type === 'platform'
-                                      ? 'hover:opacity-90 hover:stroke-blue-400'
-                                      : 'hover:opacity-90 hover:stroke-gray-500'
-                              }
-                              style={{ filter: node.type === 'master' ? 'drop-shadow(0 0 8px rgba(255, 215, 0, 0.5))' : 'none' }}
-                            />
-                            {scale > 0.7 && (
-                              <>
-                                <text
-                                  x={node.x}
-                                  y={node.y}
-                                  fill={node.type === 'master' ? '#000000' : 'white'}
-                                  fontSize={
-                                    node.type === 'post'
-                                      ? 12
-                                      : `${Math.min(12, Math.max(8, 12 * scale))}`
-                                  }
-                                  fontWeight={node.type === 'post' ? 500 : 'bold'}
-                                  textAnchor="middle"
-                                  dominantBaseline="middle"
-                                  className="select-none pointer-events-none"
-                                  style={{ 
-                                    textShadow: node.type === 'master' ? 'none' : '1px 1px 2px rgba(0, 0, 0, 0.8)',
-                                    filter: node.type === 'master' ? 'none' : 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.9))'
-                                  }}
-                                >
-                                  {node.label.length > (12 / scale) ? node.label.substring(0, Math.floor(10 / scale)) + '...' : node.label}
-                                </text>
-
-                                {/* Display Post Text for Master Node - Positioned BELOW the node with proper spacing */}
-                                {node.type === 'master' && node.data?.postText && (
-                                  <>
-                                    {/* Visual connector line from node to text box */}
+                            return (
+                              <TooltipProvider key={`edge-${index}`}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
                                     <line
-                                      x1={node.x}
-                                      y1={(node.y || 0) + 35}
-                                      x2={node.x}
-                                      y2={(node.y || 0) + 35 + 30}
-                                      stroke="#6B7280"
-                                      strokeWidth="1.5"
-                                      strokeDasharray="4,4"
-                                      opacity="0.5"
-                                      className="pointer-events-none"
+                                      x1={startPoint.x}
+                                      y1={startPoint.y}
+                                      x2={endPoint.x}
+                                      y2={endPoint.y}
+                                      stroke={isPostEdge ? '#9CA3AF' : toNode.type === 'master' ? '#6B7280' : '#4B5563'}
+                                      strokeWidth={isPostEdge ? '1.2' : isSourceToPlatform ? '1.5' : toNode.type === 'master' ? '2.5' : '2'}
+                                      opacity={
+                                        isPostEdge
+                                          ? '0.6'
+                                          : isSourceToPlatform
+                                            ? '0.22'
+                                            : toNode.type === 'master'
+                                              ? '0.7'
+                                              : '0.5'
+                                      }
+                                      className="cursor-pointer hover:stroke-blue-400 hover:opacity-100 transition-all"
+                                      onClick={(e) => handleEdgeClick(edge, e)}
+                                      style={{
+                                        filter: 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.3))',
+                                        transition: 'all 0.2s ease',
+                                        pointerEvents: 'stroke',
+                                        strokeDasharray: isPostEdge ? '4,3' : undefined
+                                      }}
                                     />
-                                    <foreignObject
-                                      x={Math.max(0, Math.min((node.x || 0) - 125, 750))}
-                                      y={(node.y || 0) + 35 + 60}
-                                      width="250"
-                                      height="180"
-                                      className="pointer-events-none"
-                                      style={{ overflow: 'visible' }}
-                                    >
-                                      <div className="flex flex-col gap-2 h-full" style={{ maxWidth: '250px', wordWrap: 'break-word' }}>
-                                        <span className="text-yellow-400 font-bold text-sm mb-1">Main Post Text</span>
-                                        <div className="flex-1 overflow-hidden">
-                                          <p className="text-gray-200 text-xs leading-relaxed bg-gray-900/95 p-3 rounded-lg backdrop-blur-sm border border-yellow-500/30 shadow-lg break-words h-full overflow-y-auto">
-                                            {node.data.postText}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </foreignObject>
-                                  </>
-                                )}
-                              </>
-                            )}
-                          </g>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="space-y-1">
-                            <p className="font-semibold">{node.label}</p>
-                            <p className="text-sm text-gray-400">Type: {node.type}</p>
-                            {node.data && (
-                              <p className="text-sm text-gray-400">
-                                Posts: {node.data.posts.length}
-                                {node.type === 'source' && ' (click to view)'}
-                              </p>
-                            )}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ))}
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-sm">Connection: {fromNode.label} → {toNode.label}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )
+                          })}
+                        </g>
+
+                        {/* Nodes */}
+                        <g id="nodes">
+                          {nodes.map((node) => (
+                            <TooltipProvider key={node.id}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <g
+                                    onClick={() => handleNodeClick(node)}
+                                    className={`cursor-pointer transition-all ${node.type === 'source' ? 'hover:opacity-80' : 'hover:opacity-60'
+                                      } ${selectedNode?.id === node.id ? 'opacity-100' : ''}`}
+                                    style={{ pointerEvents: 'auto' }}
+                                  >
+                                    <circle
+                                      cx={node.x}
+                                      cy={node.y}
+                                      r={
+                                        node.type === 'master'
+                                          ? 35
+                                          : node.type === 'source'
+                                            ? 18
+                                            : node.type === 'platform'
+                                              ? 20
+                                              : 16
+                                      }
+                                      fill={
+                                        node.type === 'master'
+                                          ? '#FFD700'
+                                          : node.type === 'source'
+                                            ? '#10B981'
+                                            : node.type === 'platform'
+                                              ? getPlatformColor(node.label)
+                                              : getPlatformColor(node.data?.posts?.[0]?.platform || node.label)
+                                      }
+                                      stroke={
+                                        node.type === 'post'
+                                          ? node.data?.posts?.[0]?.sentiment === 'positive'
+                                            ? '#22C55E'
+                                            : node.data?.posts?.[0]?.sentiment === 'negative'
+                                              ? '#EF4444'
+                                              : '#9CA3AF'
+                                          : selectedNode?.id === node.id
+                                            ? '#F59E0B'
+                                            : node.type === 'master'
+                                              ? '#FFA500'
+                                              : node.type === 'source'
+                                                ? '#2D3748'
+                                                : node.type === 'platform'
+                                                  ? '#2D3748'
+                                                  : '#4B5563'
+                                      }
+                                      strokeWidth={
+                                        selectedNode?.id === node.id
+                                          ? 3
+                                          : node.type === 'master'
+                                            ? 2.5
+                                            : node.type === 'source'
+                                              ? 2
+                                              : node.type === 'platform'
+                                                ? 2
+                                                : 1.5
+                                      }
+                                      className={
+                                        node.type === 'master'
+                                          ? 'hover:opacity-90 hover:stroke-yellow-400'
+                                          : node.type === 'source'
+                                            ? 'hover:fill-green-600 hover:stroke-green-400'
+                                            : node.type === 'platform'
+                                              ? 'hover:opacity-90 hover:stroke-blue-400'
+                                              : 'hover:opacity-90 hover:stroke-gray-500'
+                                      }
+                                      style={{ filter: node.type === 'master' ? 'drop-shadow(0 0 8px rgba(255, 215, 0, 0.5))' : 'none' }}
+                                    />
+                                    {scale > 0.7 && (
+                                      <>
+                                        <text
+                                          x={node.x}
+                                          y={node.y}
+                                          fill={node.type === 'master' ? '#000000' : 'white'}
+                                          fontSize={
+                                            node.type === 'post'
+                                              ? 12
+                                              : `${Math.min(12, Math.max(8, 12 * scale))}`
+                                          }
+                                          fontWeight={node.type === 'post' ? 500 : 'bold'}
+                                          textAnchor="middle"
+                                          dominantBaseline="middle"
+                                          className="select-none pointer-events-none"
+                                          style={{
+                                            textShadow: node.type === 'master' ? 'none' : '1px 1px 2px rgba(0, 0, 0, 0.8)',
+                                            filter: node.type === 'master' ? 'none' : 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.9))'
+                                          }}
+                                        >
+                                          {node.label.length > (12 / scale) ? node.label.substring(0, Math.floor(10 / scale)) + '...' : node.label}
+                                        </text>
+
+                                        {/* Display Post Text for Master Node - Positioned RIGHT of the node */}
+                                        {node.type === 'master' && node.data?.postText && (
+                                          <>
+                                            {/* Visual connector line (Stem) */}
+                                            <line
+                                              x1={node.x}
+                                              y1={(node.y || 0) + 35}
+                                              x2={node.x}
+                                              y2={(node.y || 0) + 35 + 20}
+                                              stroke="#666"
+                                              strokeWidth={1.5}
+                                              opacity={0.7}
+                                            />
+                                            <foreignObject
+                                              x={Math.min((node.x || 0) + 40, 2000 - 250 - 20)}
+                                              y={(node.y || 0) + 35 + 60}
+                                              width="250"
+                                              height="180"
+                                              className="pointer-events-none"
+                                              style={{ overflow: 'visible', pointerEvents: 'none' }}
+                                            >
+                                              <div className="flex flex-col gap-2 h-full" style={{ maxWidth: '250px', wordWrap: 'break-word' }}>
+                                                <span className="text-yellow-400 font-bold text-sm mb-1">Main Post Text</span>
+                                                <div className="flex-1 overflow-hidden">
+                                                  <p className="text-gray-200 text-xs leading-relaxed bg-gray-900/95 p-3 rounded-lg backdrop-blur-sm border border-yellow-500/30 shadow-lg break-words h-full overflow-y-auto">
+                                                    {node.data.postText}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </foreignObject>
+                                          </>
+                                        )}
+                                      </>
+                                    )}
+                                  </g>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <div className="space-y-1">
+                                    <p className="font-semibold">{node.label}</p>
+                                    <p className="text-sm text-gray-400">Type: {node.type}</p>
+                                    {node.data && (
+                                      <p className="text-sm text-gray-400">
+                                        Posts: {node.data.posts.length}
+                                        {node.type === 'source' && ' (click to view)'}
+                                      </p>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ))}
+                        </g>
+                      </>
+                    ), [nodes, edges, selectedNode, scale, getPlatformColor, getHorizontalAnchor, getCircleEdgePoint])}
                   </g>
                 </svg>
               </div>
@@ -800,10 +808,10 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
             )}
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Posts Modal for Selected Source */}
-      <Dialog open={showPostsModal} onOpenChange={setShowPostsModal}>
+      < Dialog open={showPostsModal} onOpenChange={setShowPostsModal} >
         <DialogContent className="max-w-4xl max-h-[80vh] bg-gray-900 border-gray-800 text-white">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">
@@ -883,10 +891,10 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
             </div>
           </ScrollArea>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Post Detail Modal for Post Nodes */}
-      <Dialog open={showPostModal} onOpenChange={setShowPostModal}>
+      < Dialog open={showPostModal} onOpenChange={setShowPostModal} >
         <DialogContent className="max-w-3xl max-h-[80vh] bg-gray-900 border-gray-800 text-white">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">
@@ -953,7 +961,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
             </div>
           </ScrollArea>
         </DialogContent>
-      </Dialog>
+      </Dialog >
     </>
   )
 }
