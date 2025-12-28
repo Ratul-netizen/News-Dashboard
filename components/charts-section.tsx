@@ -149,7 +149,15 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartData.categoryTrending} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="category" tick={{ fill: "#D1D5DB", fontSize: 12 }} axisLine={{ stroke: "#6B7280" }} />
+                <XAxis
+                  dataKey="category"
+                  interval={0}
+                  angle={-45}
+                  textAnchor="end"
+                  height={70}
+                  tick={{ fill: "#D1D5DB", fontSize: 12 }}
+                  axisLine={{ stroke: "#6B7280" }}
+                />
                 <YAxis tick={{ fill: "#D1D5DB", fontSize: 12 }} axisLine={{ stroke: "#6B7280" }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="posts" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
@@ -215,7 +223,15 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
                 margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="category" tick={{ fill: "#D1D5DB", fontSize: 12 }} axisLine={{ stroke: "#6B7280" }} />
+                <XAxis
+                  dataKey="category"
+                  interval={0}
+                  angle={-45}
+                  textAnchor="end"
+                  height={70}
+                  tick={{ fill: "#D1D5DB", fontSize: 12 }}
+                  axisLine={{ stroke: "#6B7280" }}
+                />
                 <YAxis tick={{ fill: "#D1D5DB", fontSize: 12 }} axisLine={{ stroke: "#6B7280" }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="avgScore" fill="hsl(var(--chart-4))" radius={[4, 4, 0, 0]} />
@@ -238,7 +254,15 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartData.categoryReactions} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="category" tick={{ fill: "#D1D5DB", fontSize: 12 }} axisLine={{ stroke: "#6B7280" }} />
+                <XAxis
+                  dataKey="category"
+                  interval={0}
+                  angle={-45}
+                  textAnchor="end"
+                  height={70}
+                  tick={{ fill: "#D1D5DB", fontSize: 12 }}
+                  axisLine={{ stroke: "#6B7280" }}
+                />
                 <YAxis tick={{ fill: "#D1D5DB", fontSize: 12 }} axisLine={{ stroke: "#6B7280" }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="reactions" fill={ENGAGEMENT_COLORS.reactions} radius={[4, 4, 0, 0]} />
@@ -272,13 +296,13 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
                   nameKey="sentiment"
                 >
                   {chartData.sentimentDistribution.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
+                    <Cell
+                      key={`cell-${index}`}
                       fill={
                         entry.sentiment === 'positive' ? '#10B981' :
-                        entry.sentiment === 'negative' ? '#EF4444' :
-                        '#6B7280'
-                      } 
+                          entry.sentiment === 'negative' ? '#EF4444' :
+                            '#6B7280'
+                      }
                     />
                   ))}
                 </Pie>
