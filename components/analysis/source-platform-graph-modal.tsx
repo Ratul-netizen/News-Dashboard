@@ -498,7 +498,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-6xl max-h-[90vh] bg-gray-900 border-gray-800 text-white overflow-hidden">
+        <DialogContent className="max-w-6xl max-h-[90vh] bg-gray-900 border-gray-800 text-white overflow-hidden p-0">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Network className="w-6 h-6 text-blue-400" />
@@ -509,7 +509,7 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="p-6 space-y-4">
             {/* Controls */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-4 text-sm flex-wrap">
@@ -573,21 +573,19 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
               style={{ height: '600px', maxWidth: '100%', overflow: 'hidden' }}
             >
               <div
-                className="w-full h-full overflow-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+                className="w-full h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
                 onWheel={handleWheel}
                 style={{ contain: 'layout style paint', paddingRight: 16 }}
               >
                 <svg
                   ref={svgRef}
-                  width="1200"
-                  height="1600"
-                  className="block flex-shrink-0"
+                  viewBox="0 0 1200 1600"
+                  className="w-full h-full block flex-shrink-0"
+                  preserveAspectRatio="xMinYMin meet"
                   style={{
                     cursor: isDragging ? 'grabbing' : 'grab',
                   }}
                   onMouseDown={handleMouseDown}
-                  viewBox="0 0 1200 1600"
-                  preserveAspectRatio="xMinYMin meet"
                 >
                   <g transform={`translate(${position.x}, ${position.y}) scale(${scale})`}>
                     {useMemo(() => (
