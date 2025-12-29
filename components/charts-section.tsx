@@ -71,10 +71,11 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
 
   // Custom label for pie chart
   const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
-    if (percent < 0.05) return null // Don't show labels for slices < 5%
+    if (percent < 0.03) return null // hide tiny slices
 
     const RADIAN = Math.PI / 180
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.6
+
     const x = cx + radius * Math.cos(-midAngle * RADIAN)
     const y = cy + radius * Math.sin(-midAngle * RADIAN)
 
@@ -83,12 +84,12 @@ export function ChartsSection({ chartData }: ChartsSectionProps) {
         x={x}
         y={y}
         fill="white"
-        textAnchor={x > cx ? "start" : "end"}
+        textAnchor="middle"
         dominantBaseline="central"
         fontSize={12}
-        fontWeight="500"
+        fontWeight={500}
       >
-        {`${(percent * 100).toFixed(0)}%`}
+        {`${Math.round(percent * 100)}%`}
       </text>
     )
   }

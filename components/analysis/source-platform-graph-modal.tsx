@@ -178,32 +178,41 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
 
     // Position nodes in bipartite layout with perfect vertical alignment
     // Use a larger virtual canvas to keep all nodes reachable
-    const svgWidth = 2000
+    const svgWidth = 1200 // Reduced from 2000 to prevent wide gaps
     const svgHeight = 1600
+    const PADDING_X = 80
+    const MIN_X = PADDING_X
+    const MAX_X = svgWidth - PADDING_X
 
-    // Fixed X positions for perfect column alignment
+    // Fixed X positions for perfect column alignment (normalized)
     const sourceColumnX = 150
-    const platformColumnX = 500 // Center
-    const masterNodeX = 850
+    const platformColumnX = svgWidth / 2 // Center
+    const masterNodeX = svgWidth - 250 // Right side but within bounds
+
     // --- Centering logic ---
-    const GRAPH_WIDTH = masterNodeX - sourceColumnX + 300 // safe padding
-    const GRAPH_OFFSET_X = (svgWidth - GRAPH_WIDTH) / 2
+    // No longer needed as we use absolute positions relative to reducing width
+    const GRAPH_OFFSET_X = 0
 
     // Calculate vertical spacing for perfect alignment
     // Use independent spacing per column to avoid cross-column skew
     const topMargin = 100
     const bottomMargin = 100
     const availableHeight = svgHeight - topMargin - bottomMargin
+
+    // Normalize spacing to avoid over-stretching
     const sourceSpacingBase = uniqueSources.length > 1 ? availableHeight / (uniqueSources.length - 1) : 0
-    const sourceSpacing = Math.max(sourceSpacingBase, 56)
-    const platformSpacing = uniquePlatforms.length > 1 ? availableHeight / (uniquePlatforms.length - 1) : 0
+    const sourceSpacing = Math.min(Math.max(sourceSpacingBase, 56), 240) // Clamp spacing
+
+    const platformSpacingBase = uniquePlatforms.length > 1 ? availableHeight / (uniquePlatforms.length - 1) : 0
+    const platformSpacing = Math.min(Math.max(platformSpacingBase, 56), 240) // Clamp spacing
+
     const startY = topMargin
 
     // Position master node at the right side, vertically centered with platforms
     if (mainPost) {
       const masterNode = graphNodes.find(n => n.id === 'master-0')
       if (masterNode) {
-        masterNode.x = masterNodeX + GRAPH_OFFSET_X
+        masterNode.x = Math.min(Math.max(masterNodeX, MIN_X), MAX_X)
         // Align master node vertically with the middle of the platform column
         const platformMiddleIndex = (uniquePlatforms.length - 1) / 2
         masterNode.y = startY + (platformMiddleIndex * platformSpacing)
@@ -214,7 +223,8 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     uniqueSources.forEach((_, index) => {
       const node = graphNodes.find(n => n.id === `source-${index}`)
       if (node) {
-        node.x = sourceColumnX + GRAPH_OFFSET_X
+        const calculatedX = sourceColumnX
+        node.x = Math.min(Math.max(calculatedX, MIN_X), MAX_X)
         node.y = startY + (index * sourceSpacing)
       }
     })
@@ -223,7 +233,8 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     uniquePlatforms.forEach((_, index) => {
       const node = graphNodes.find(n => n.id === `platform-${index}`)
       if (node) {
-        node.x = platformColumnX + GRAPH_OFFSET_X
+        const calculatedX = platformColumnX
+        node.x = Math.min(Math.max(calculatedX, MIN_X), MAX_X)
         node.y = startY + (index * platformSpacing)
       }
     })
@@ -246,11 +257,11 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
       const POST_Y_GAP = 44
       // Layout constants matching the graph generation
       const sourceColumnX = 150
-      const masterNodeX = 850
-      const svgWidth = 2000
+      const masterNodeX = 950 // approx relative to new scale
+      const svgWidth = 1200
       const GRAPH_WIDTH = masterNodeX - sourceColumnX + 300
-      const GRAPH_OFFSET_X = (svgWidth - GRAPH_WIDTH) / 2
-      const MIN_X = GRAPH_OFFSET_X + 20
+      const GRAPH_OFFSET_X = 0
+      const MIN_X = 80 // Matching PADDING_X
 
       const baseX = Math.max((sourceNode.x || 0) - POST_X_OFFSET, MIN_X)
       const startY = (sourceNode.y || 0) - ((postsToShow.length - 1) * POST_Y_GAP) / 2
@@ -456,6 +467,34 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
     return PLATFORM_COLORS[normalizedPlatform] || PLATFORM_COLORS.default
   }, [])
 
+  // --- Master post text box layout (prevents overlap) ---
+  const SVG_W = 1200
+  const SVG_H = 1600
+  const PAD = 20
+
+  const MASTER_R = 35
+  const BOX_W = 250
+  const BOX_H = 180
+  const GAP_Y = 8
+
+  function getMasterBoxLayout(nodeX: number, nodeY: number) {
+    // Position box BELOW the node, centered horizontally
+    // Center horizontally: nodeX - BOX_W / 2, clamped to stay within SVG bounds
+    const boxX = Math.max(PAD, Math.min(SVG_W - BOX_W - PAD, nodeX - BOX_W / 2))
+    
+    // Position below the node: nodeY + radius + gap
+    let boxY = nodeY + MASTER_R + GAP_Y
+    // Clamp vertically to stay within canvas bounds
+    boxY = Math.max(PAD, Math.min(SVG_H - BOX_H - PAD, boxY))
+
+    // Vertical stem: from bottom of node to top of text box
+    const stemX = nodeX
+    const stemY1 = nodeY + MASTER_R
+    const stemY2 = boxY
+
+    return { boxX, boxY, stemX, stemY1, stemY2 }
+  }
+
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
@@ -530,24 +569,24 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
             {/* Graph Visualization */}
             <div
               ref={containerRef}
-              className="bg-gray-950 rounded-lg border border-gray-700 relative shadow-inner"
-              style={{ height: '600px', maxWidth: '100%', overflow: 'auto' }}
+              className="bg-gray-950 rounded-lg border border-gray-700 relative shadow-inner p-4"
+              style={{ height: '600px', maxWidth: '100%', overflow: 'hidden' }}
             >
               <div
-                className="w-full h-full scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+                className="w-full h-full overflow-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
                 onWheel={handleWheel}
-                style={{ contain: 'layout style paint' }}
+                style={{ contain: 'layout style paint', paddingRight: 16 }}
               >
                 <svg
                   ref={svgRef}
-                  width="2000"
+                  width="1200"
                   height="1600"
-                  className="block"
+                  className="block flex-shrink-0"
                   style={{
                     cursor: isDragging ? 'grabbing' : 'grab',
                   }}
                   onMouseDown={handleMouseDown}
-                  viewBox="0 0 2000 1600"
+                  viewBox="0 0 1200 1600"
                   preserveAspectRatio="xMinYMin meet"
                 >
                   <g transform={`translate(${position.x}, ${position.y}) scale(${scale})`}>
@@ -559,8 +598,8 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                             <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1F2937" strokeWidth="0.8" opacity="0.5" />
                           </pattern>
                         </defs>
-                        <rect width="2000" height="1600" fill="#0A0A0A" />
-                        <rect width="2000" height="1600" fill="url(#grid)" opacity="0.3" />
+                        <rect width="1200" height="1600" fill="#0A0A0A" />
+                        <rect width="1200" height="1600" fill="url(#grid)" opacity="0.3" />
 
                         {/* Edges */}
                         <g id="edges">
@@ -716,38 +755,45 @@ export function SourcePlatformGraphModal({ isOpen, onClose, posts, mainPost }: S
                                           {node.label.length > (12 / scale) ? node.label.substring(0, Math.floor(10 / scale)) + '...' : node.label}
                                         </text>
 
-                                        {/* Display Post Text for Master Node - Positioned RIGHT of the node */}
-                                        {node.type === 'master' && node.data?.postText && (
-                                          <>
-                                            {/* Visual connector line (Stem) */}
-                                            <line
-                                              x1={node.x}
-                                              y1={(node.y || 0) + 35}
-                                              x2={node.x}
-                                              y2={(node.y || 0) + 35 + 20}
-                                              stroke="#666"
-                                              strokeWidth={1.5}
-                                              opacity={0.7}
-                                            />
-                                            <foreignObject
-                                              x={Math.min((node.x || 0) + 40, 2000 - 250 - 20)}
-                                              y={(node.y || 0) + 35 + 60}
-                                              width="250"
-                                              height="180"
-                                              className="pointer-events-none"
-                                              style={{ overflow: 'visible', pointerEvents: 'none' }}
-                                            >
-                                              <div className="flex flex-col gap-2 h-full" style={{ maxWidth: '250px', wordWrap: 'break-word' }}>
-                                                <span className="text-yellow-400 font-bold text-sm mb-1">Main Post Text</span>
-                                                <div className="flex-1 overflow-hidden">
-                                                  <p className="text-gray-200 text-xs leading-relaxed bg-gray-900/95 p-3 rounded-lg backdrop-blur-sm border border-yellow-500/30 shadow-lg break-words h-full overflow-y-auto">
-                                                    {node.data.postText}
-                                                  </p>
+                                        {/* Display Post Text for Master Node - Positioned BELOW the node */}
+                                        {node.type === 'master' && node.data?.postText && (() => {
+                                          const x = node.x || 0
+                                          const y = node.y || 0
+                                          const { boxX, boxY, stemX, stemY1, stemY2 } = getMasterBoxLayout(x, y)
+
+                                          return (
+                                            <>
+                                              {/* Vertical Connector (Stem) - from bottom of node to top of text box */}
+                                              <line
+                                                x1={stemX}
+                                                y1={stemY1}
+                                                x2={stemX}
+                                                y2={stemY2}
+                                                stroke="#666"
+                                                strokeWidth={1.5}
+                                                opacity={0.7}
+                                              />
+
+                                              <foreignObject
+                                                x={boxX}
+                                                y={boxY}
+                                                width={BOX_W}
+                                                height={BOX_H}
+                                                className="pointer-events-none"
+                                                style={{ overflow: 'visible', pointerEvents: 'none' }}
+                                              >
+                                                <div className="flex flex-col gap-2 h-full" style={{ maxWidth: `${BOX_W}px`, wordWrap: 'break-word' }}>
+                                                  <span className="text-yellow-400 font-bold text-sm mb-1">Main Post Text</span>
+                                                  <div className="flex-1 overflow-hidden">
+                                                    <p className="text-gray-200 text-xs leading-relaxed bg-gray-900/95 p-3 rounded-lg backdrop-blur-sm border border-yellow-500/30 shadow-lg break-words h-full overflow-y-auto">
+                                                      {node.data.postText}
+                                                    </p>
+                                                  </div>
                                                 </div>
-                                              </div>
-                                            </foreignObject>
-                                          </>
-                                        )}
+                                              </foreignObject>
+                                            </>
+                                          )
+                                        })()}
                                       </>
                                     )}
                                   </g>
